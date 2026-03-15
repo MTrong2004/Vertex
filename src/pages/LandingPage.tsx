@@ -23,8 +23,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
       
       <main className="flex-1">
         <Hero 
-          onStart={() => setIsModalOpen(true)} 
-          onDemo={() => onNavigate('dashboard')} 
+          onStart={() => setIsModalOpen(true)}
         />
         <Features onNavigate={onNavigate} />
       </main>

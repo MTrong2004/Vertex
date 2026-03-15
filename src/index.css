@@ -259,6 +259,19 @@ body {
   background: var(--primary-gradient);
 }
 
+.sitemap-stage,
+.sitemap-stage svg,
+.sitemap-stage text,
+.sitemap-stage tspan {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sitemap-stage svg {
+  text-rendering: geometricPrecision;
+  shape-rendering: geometricPrecision;
+}
+
 /* Glass effect utility */
 .glass {
   background: rgba(15, 26, 42, 0.6);
@@ -297,4 +310,20 @@ body {
 }
 .animate-marquee {
   animation: marquee 30s linear infinite;
+}
+
+.sitemap-stage svg g.node {
+  cursor: pointer;
+}
+
+.sitemap-stage svg g.node rect,
+.sitemap-stage svg g.node polygon,
+.sitemap-stage svg g.node path {
+  transition: filter 140ms ease, stroke 140ms ease;
+}
+
+.sitemap-stage svg g.node:hover rect,
+.sitemap-stage svg g.node:hover polygon,
+.sitemap-stage svg g.node:hover path {
+  filter: brightness(1.1);
 }

@@ -8,7 +8,7 @@ interface DeadlineCalendarProps {
 }
 
 const statusColors: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-  'on-track': { bg: 'bg-green-500/5',  text: 'text-green-400',  border: 'border-green-500/20',  dot: 'bg-green-400'  },
+  'on-track': { bg: 'bg-green-500/5',  text: 'text-green-400',  border: 'border-amber-500/25',  dot: 'bg-green-400'  },
   'at-risk':  { bg: 'bg-amber-500/5',  text: 'text-amber-400',  border: 'border-amber-500/20',  dot: 'bg-amber-400'  },
   'overdue':  { bg: 'bg-red-500/5',    text: 'text-red-400',    border: 'border-red-500/20',    dot: 'bg-red-400'    },
 };
@@ -56,7 +56,7 @@ export const DeadlineCalendar: React.FC<DeadlineCalendarProps> = ({ groups, onSe
           <Filter size={13} className="text-slate-500" />
           {(['all', 'late', 'review'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${filter === f ? 'bg-[#22C55E]/20 text-[#6EE7B7] border border-[#22C55E]/35 shadow-[0_10px_22px_rgba(34,197,94,0.14)]' : 'bg-[#162032] text-slate-400 border border-transparent hover:border-[#22C55E]/20 hover:text-white hover:shadow-[0_10px_22px_rgba(10,15,26,0.42)]'}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${filter === f ? 'bg-[#22C55E]/20 text-[#6EE7B7] border border-[#F59E0B]/35 shadow-[0_10px_22px_rgba(34,197,94,0.14)]' : 'bg-[#162032] text-slate-400 border border-transparent hover:border-[#F59E0B]/30 hover:text-white hover:shadow-[0_10px_22px_rgba(10,15,26,0.42)]'}`}>
               {f === 'all' ? 'All Groups' : f === 'late' ? `Late Tasks (${overdueCount})` : `Review (${reviewCount})`}
             </button>
           ))}
@@ -65,7 +65,7 @@ export const DeadlineCalendar: React.FC<DeadlineCalendarProps> = ({ groups, onSe
 
       {/* Summary strip */}
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-[#0F1A2A] rounded-xl p-3 border border-[#1e3a2e] flex items-center gap-3">
+        <div className="bg-[#0F1A2A] rounded-xl p-3 border border-[#3A3317] flex items-center gap-3">
           <Clock size={16} className="text-[#22C55E] flex-shrink-0" />
           <div><p className="text-lg font-bold text-white">{groups.length}</p><p className="text-[10px] text-slate-500">Total Deadlines</p></div>
         </div>
@@ -73,7 +73,7 @@ export const DeadlineCalendar: React.FC<DeadlineCalendarProps> = ({ groups, onSe
           <AlertTriangle size={16} className="text-red-400 flex-shrink-0" />
           <div><p className="text-lg font-bold text-white">{overdueCount}</p><p className="text-[10px] text-slate-500">Overdue</p></div>
         </div>
-        <div className="bg-[#0F1A2A] rounded-xl p-3 border border-green-500/20 flex items-center gap-3">
+        <div className="bg-[#0F1A2A] rounded-xl p-3 border border-amber-500/30 flex items-center gap-3">
           <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
           <div><p className="text-lg font-bold text-white">{groups.filter(g => g.progress >= 100).length}</p><p className="text-[10px] text-slate-500">Completed</p></div>
         </div>
@@ -95,7 +95,7 @@ export const DeadlineCalendar: React.FC<DeadlineCalendarProps> = ({ groups, onSe
               <div key={date} className="flex gap-5">
                 {/* Date badge */}
                 <div className="flex-shrink-0 w-24 text-right">
-                  <div className="inline-flex flex-col items-center px-2 py-1.5 bg-[#0F1A2A] border border-[#22C55E]/20 rounded-lg">
+                  <div className="inline-flex flex-col items-center px-2 py-1.5 bg-[#0F1A2A] border border-[#F59E0B]/30 rounded-lg">
                     <span className="text-[10px] text-[#22C55E] font-bold">{date.split(' ')[0]}</span>
                     <span className="text-lg font-black text-white leading-none">{date.split(' ')[1]}</span>
                   </div>
@@ -108,7 +108,7 @@ export const DeadlineCalendar: React.FC<DeadlineCalendarProps> = ({ groups, onSe
                     const gReview = group.tasks.filter(t => t.status === 'ready-for-review').length;
                     return (
                       <button key={group.id} onClick={() => onSelectGroup(group)}
-                        className={`w-full text-left px-4 py-3 rounded-xl border ${sc.bg} ${sc.border} hover:border-[#22C55E]/35 hover:shadow-[0_16px_30px_rgba(10,15,26,0.46)] transition-all duration-200 group`}>
+                        className={`w-full text-left px-4 py-3 rounded-xl border ${sc.bg} ${sc.border} hover:border-[#F59E0B]/35 hover:shadow-[0_16px_30px_rgba(10,15,26,0.46)] transition-all duration-200 group`}>
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-2">
                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${sc.dot}`} />

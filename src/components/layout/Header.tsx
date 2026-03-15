@@ -26,7 +26,6 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, currentPage }) => {
     { label: t.nav.features,  id: 'features'   },
     { label: t.nav.pricing,   id: 'pricing'    },
     { label: t.nav.resources, id: 'resources'  },
-    { label: t.nav.demo,      id: 'dashboard'  },
   ];
 
   return (

@@ -1,4 +1,4 @@
-# Figma export for Project Planning Tool
+# Figma export for Vertex
 
 This folder contains style tokens and a couple of vector assets exported from the codebase to import into Figma.
 

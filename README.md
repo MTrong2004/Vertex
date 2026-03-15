@@ -1,4 +1,4 @@
-# Project Planning Tool
+# Vertex
 
 A student-focused AI project planning web app designed for design students and creative teams.
 

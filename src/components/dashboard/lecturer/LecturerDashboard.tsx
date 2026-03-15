@@ -62,12 +62,12 @@ const LecturerSidebar: React.FC<LecturerSidebarProps> = ({
         )}
       </AnimatePresence>
 
-      <aside className={`fixed left-0 top-16 bottom-0 bg-[#0F1A2A]/90 backdrop-blur-xl border-r border-[#22C55E]/10 transition-all duration-300 z-30 ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:h-[calc(100vh-4rem)] ${collapsed ? 'w-[60px]' : 'w-64'}`}>
+      <aside className={`fixed left-0 top-16 bottom-0 bg-[#0F1A2A]/90 backdrop-blur-xl border-r border-[#F59E0B]/15 transition-all duration-300 z-30 ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:h-[calc(100vh-4rem)] ${collapsed ? 'w-[60px]' : 'w-64'}`}>
         <div className="flex flex-col h-full relative">
 
           {/* Collapse toggle */}
           <button onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:flex absolute -right-3 top-5 z-40 w-6 h-6 rounded-full bg-[#162032] border border-[#22C55E]/20 items-center justify-center text-slate-400 hover:text-[#6EE7B7] hover:border-[#6EE7B7]/60 hover:shadow-[0_8px_18px_rgba(34,197,94,0.24)] transition-all duration-200 shadow-md">
+            className="hidden lg:flex absolute -right-3 top-5 z-40 w-6 h-6 rounded-full bg-[#162032] border border-[#F59E0B]/35 items-center justify-center text-slate-400 hover:text-[#6EE7B7] hover:border-[#FCD34D]/65 hover:shadow-[0_8px_18px_rgba(34,197,94,0.24)] transition-all duration-200 shadow-md">
             {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
           </button>
 
@@ -76,10 +76,10 @@ const LecturerSidebar: React.FC<LecturerSidebarProps> = ({
             {navItems.map(item => (
               <button key={item.id} onClick={() => handleNav(item.id)}
                 title={collapsed ? item.label : undefined}
-                className={`flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${isNavActive(item.id) ? 'text-white bg-[#22C55E]/15 border border-[#22C55E]/25 shadow-[0_10px_24px_rgba(34,197,94,0.16)]' : 'text-slate-400 border border-transparent hover:bg-[#162032] hover:text-white hover:border-[#22C55E]/20 hover:shadow-[0_10px_24px_rgba(10,15,26,0.45)]'} ${collapsed ? 'justify-center' : 'gap-3'}`}>
-                <span className={isNavActive(item.id) ? 'text-[#22C55E]' : ''}>{item.icon}</span>
+                className={`flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${isNavActive(item.id) ? 'text-white bg-[#F59E0B]/15 border border-[#F59E0B]/30 shadow-[0_10px_24px_rgba(245,158,11,0.2)]' : 'text-slate-400 border border-transparent hover:bg-[#162032] hover:text-white hover:border-[#F59E0B]/30 hover:shadow-[0_10px_24px_rgba(10,15,26,0.45)]'} ${collapsed ? 'justify-center' : 'gap-3'}`}>
+                <span className={isNavActive(item.id) ? 'text-[#FCD34D]' : ''}>{item.icon}</span>
                 {!collapsed && <span>{item.label}</span>}
-                {!collapsed && isNavActive(item.id) && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#22C55E]" />}
+                {!collapsed && isNavActive(item.id) && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />}
               </button>
             ))}
           </nav>
@@ -103,7 +103,7 @@ const LecturerSidebar: React.FC<LecturerSidebarProps> = ({
                       const isActive = activeView === 'groups' && activeClass === cls;
                       return (
                         <button key={cls} onClick={() => onNavigate('groups', cls)}
-                          className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm transition-all duration-200 ${isActive ? 'bg-[#22C55E]/15 border border-[#22C55E]/25 text-white shadow-[0_8px_18px_rgba(34,197,94,0.12)]' : 'text-slate-400 border border-transparent hover:bg-[#162032] hover:text-white hover:border-[#22C55E]/20'}`}>
+                          className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm transition-all duration-200 ${isActive ? 'bg-[#22C55E]/15 border border-[#F59E0B]/35 text-white shadow-[0_8px_18px_rgba(34,197,94,0.12)]' : 'text-slate-400 border border-transparent hover:bg-[#162032] hover:text-white hover:border-[#F59E0B]/30'}`}>
                           <div className="flex items-center gap-2 min-w-0">
                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-[#22C55E]' : 'bg-slate-600'}`} />
                             <span className="text-xs font-medium truncate">{cls}</span>
@@ -124,7 +124,7 @@ const LecturerSidebar: React.FC<LecturerSidebarProps> = ({
               {LECTURER_CLASSES.map((cls, i) => (
                 <button key={cls} onClick={() => onNavigate('groups', cls)}
                   title={cls}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 text-[10px] font-black ${activeClass === cls ? 'bg-[#22C55E]/20 text-[#22C55E] border border-[#22C55E]/25 shadow-[0_8px_18px_rgba(34,197,94,0.14)]' : 'bg-[#162032] text-slate-500 border border-transparent hover:text-[#6EE7B7] hover:border-[#22C55E]/25 hover:shadow-[0_8px_16px_rgba(10,15,26,0.5)]'}`}>
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 text-[10px] font-black ${activeClass === cls ? 'bg-[#22C55E]/20 text-[#22C55E] border border-[#F59E0B]/35 shadow-[0_8px_18px_rgba(34,197,94,0.14)]' : 'bg-[#162032] text-slate-500 border border-transparent hover:text-[#6EE7B7] hover:border-[#F59E0B]/35 hover:shadow-[0_8px_16px_rgba(10,15,26,0.5)]'}`}>
                   {i + 1}
                 </button>
               ))}
@@ -187,14 +187,14 @@ const DashboardOverview: React.FC<{
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Groups" value={totalGroups} icon={<Users size={18} className="text-[#22C55E]" />} color="border-[#22C55E]/20" />
+        <StatCard label="Groups" value={totalGroups} icon={<Users size={18} className="text-[#22C55E]" />} color="border-[#F59E0B]/35" />
         <StatCard label="Active Projects" value={activeProjects} icon={<TrendingUp size={18} className="text-blue-400" />} color="border-blue-500/20" />
         <StatCard label="Tasks Waiting Review" value={tasksWaitingReview} icon={<Clock size={18} className="text-purple-400" />} color="border-purple-500/20" />
         <StatCard label="Groups Overdue" value={groupsOverdue} icon={<AlertTriangle size={18} className="text-red-400" />} color="border-red-500/20" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <section className="bg-[#0F1A2A] rounded-xl border border-[#1e3a2e] p-4">
+        <section className="bg-[#0F1A2A] rounded-xl border border-[#3A3317] p-4">
           <h2 className="text-sm font-bold text-white mb-3">Groups Needing Attention</h2>
           <div className="space-y-2">
             {groupsNeedingAttention.length === 0 ? (
@@ -203,7 +203,7 @@ const DashboardOverview: React.FC<{
               groupsNeedingAttention.map(group => (
                 <button key={group.id}
                   onClick={() => onSelectGroup(group)}
-                  className="w-full text-left px-3 py-2 rounded-lg border border-transparent hover:border-[#22C55E]/20 hover:bg-[#162032] transition-all duration-200">
+                  className="w-full text-left px-3 py-2 rounded-lg border border-transparent hover:border-[#F59E0B]/30 hover:bg-[#162032] transition-all duration-200">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-white font-medium truncate">{group.name}</p>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${group.reviewStatus === 'overdue' ? 'text-red-300 bg-red-500/10 border-red-500/25' : 'text-amber-300 bg-amber-500/10 border-amber-500/25'}`}>
@@ -217,7 +217,7 @@ const DashboardOverview: React.FC<{
           </div>
         </section>
 
-        <section className="bg-[#0F1A2A] rounded-xl border border-[#1e3a2e] p-4">
+        <section className="bg-[#0F1A2A] rounded-xl border border-[#3A3317] p-4">
           <h2 className="text-sm font-bold text-white mb-3">Class Progress</h2>
           <div className="space-y-3">
             {[
@@ -239,13 +239,13 @@ const DashboardOverview: React.FC<{
         </section>
       </div>
 
-      <section className="bg-[#0F1A2A] rounded-xl border border-[#1e3a2e] p-4">
+      <section className="bg-[#0F1A2A] rounded-xl border border-[#3A3317] p-4">
         <h2 className="text-sm font-bold text-white mb-3">Upcoming Deadlines</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
           {upcomingDeadlines.map(group => (
             <button key={group.id}
               onClick={() => onSelectGroup(group)}
-              className="text-left px-3 py-2 rounded-lg border border-transparent hover:border-[#22C55E]/20 hover:bg-[#162032] transition-all duration-200">
+              className="text-left px-3 py-2 rounded-lg border border-transparent hover:border-[#F59E0B]/30 hover:bg-[#162032] transition-all duration-200">
               <p className="text-sm font-medium text-white truncate">{group.name}</p>
               <p className="text-[11px] text-slate-500 mt-0.5">{group.deadline}</p>
             </button>
@@ -258,7 +258,7 @@ const DashboardOverview: React.FC<{
 
 // ── Group Card ────────────────────────────────────────────────────────────────
 const statusColors: Record<string, string> = {
-  'on-track': 'text-green-400 bg-green-400/10 border-green-400/20',
+  'on-track': 'text-green-400 bg-green-400/10 border-amber-500/25',
   'at-risk':  'text-amber-400 bg-amber-400/10 border-amber-400/20',
   'overdue':  'text-red-400   bg-red-400/10   border-red-400/20',
 };
@@ -272,7 +272,7 @@ const GroupCard: React.FC<{ group: LecturerGroup; onClick: () => void }> = ({ gr
   const reviewCount = group.tasks.filter(t => t.status === 'ready-for-review').length;
   return (
     <motion.button whileHover={{ y: -2 }} onClick={onClick}
-      className="text-left w-full bg-[#0F1A2A] rounded-xl p-4 border border-[#1e3a2e] hover:border-[#22C55E]/35 hover:shadow-[0_18px_34px_rgba(10,15,26,0.45)] transition-all duration-200 group">
+      className="text-left w-full bg-[#0F1A2A] rounded-xl p-4 border border-[#3A3317] hover:border-[#F59E0B]/35 hover:shadow-[0_18px_34px_rgba(10,15,26,0.45)] transition-all duration-200 group">
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-white truncate group-hover:text-[#6EE7B7] transition-colors">{group.name}</h3>
@@ -299,13 +299,13 @@ const GroupCard: React.FC<{ group: LecturerGroup; onClick: () => void }> = ({ gr
         <div className="flex items-center gap-1">
           {/* Avatar stack */}
           {group.avatarInitials.slice(0, 3).map((init, i) => (
-            <div key={i} className="w-5 h-5 rounded-full bg-[#162032] border border-[#1e3a2e] flex items-center justify-center text-[8px] font-bold text-slate-400"
+            <div key={i} className="w-5 h-5 rounded-full bg-[#162032] border border-[#3A3317] flex items-center justify-center text-[8px] font-bold text-slate-400"
               style={{ marginLeft: i > 0 ? '-4px' : 0 }}>
               {init[0]}
             </div>
           ))}
           {group.members > 3 && (
-            <div className="w-5 h-5 rounded-full bg-[#162032] border border-[#1e3a2e] flex items-center justify-center text-[8px] text-slate-500"
+            <div className="w-5 h-5 rounded-full bg-[#162032] border border-[#3A3317] flex items-center justify-center text-[8px] text-slate-500"
               style={{ marginLeft: '-4px' }}>
               +{group.members - 3}
             </div>
@@ -335,8 +335,8 @@ const AiInsightsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   ];
   return (
     <motion.div initial={{ x: 320, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 320, opacity: 0 }}
-      className="fixed right-0 top-16 bottom-0 w-80 bg-[#0F1A2A] border-l border-[#22C55E]/10 z-40 flex flex-col shadow-2xl">
-      <div className="p-4 border-b border-[#22C55E]/10 flex items-center justify-between">
+      className="fixed right-0 top-16 bottom-0 w-80 bg-[#0F1A2A] border-l border-[#F59E0B]/15 z-40 flex flex-col shadow-2xl">
+      <div className="p-4 border-b border-[#F59E0B]/15 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles size={15} className="text-[#22C55E]" />
           <h3 className="text-sm font-bold text-white">AI Project Insights</h3>
@@ -345,12 +345,12 @@ const AiInsightsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {insights.map((ins, i) => (
-          <div key={i} className={`p-3 rounded-lg border text-xs leading-relaxed ${ins.type === 'warning' ? 'bg-amber-500/5 border-amber-500/20 text-amber-200' : ins.type === 'success' ? 'bg-green-500/5 border-green-500/20 text-green-300' : 'bg-blue-500/5 border-blue-500/20 text-blue-300'}`}>
+          <div key={i} className={`p-3 rounded-lg border text-xs leading-relaxed ${ins.type === 'warning' ? 'bg-amber-500/5 border-amber-500/20 text-amber-200' : ins.type === 'success' ? 'bg-green-500/5 border-amber-500/30 text-green-300' : 'bg-blue-500/5 border-blue-500/20 text-blue-300'}`}>
             {ins.text}
           </div>
         ))}
       </div>
-      <div className="p-3 border-t border-[#22C55E]/10">
+      <div className="p-3 border-t border-[#F59E0B]/15">
         <p className="text-[10px] text-slate-600 text-center">AI analysis based on current group data</p>
       </div>
     </motion.div>
@@ -386,7 +386,7 @@ const GroupsOverview: React.FC<{
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Groups"     value={totalGroups}  icon={<Users size={18} className="text-[#22C55E]" />}   color="border-[#22C55E]/20"  />
+        <StatCard label="Total Groups"     value={totalGroups}  icon={<Users size={18} className="text-[#22C55E]" />}   color="border-[#F59E0B]/35"  />
         <StatCard label="Active Projects"  value={activeCount}  icon={<TrendingUp size={18} className="text-blue-400" />} color="border-blue-500/20"   />
         <StatCard label="Tasks in Review"  value={reviewCount}  icon={<Clock size={18} className="text-purple-400" />}   color="border-purple-500/20" />
         <StatCard label="Overdue Groups"   value={overdueCount} icon={<AlertTriangle size={18} className="text-red-400" />} color="border-red-500/20"  />
@@ -398,12 +398,12 @@ const GroupsOverview: React.FC<{
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search groups..."
-            className="w-full pl-9 pr-3 py-2 bg-[#162032] border border-[#1e3a2e] rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#22C55E]/40" />
+            className="w-full pl-9 pr-3 py-2 bg-[#162032] border border-[#3A3317] rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F59E0B]/45" />
         </div>
         <div className="flex gap-1.5">
           {(['all', 'on-track', 'at-risk', 'overdue'] as const).map(s => (
             <button key={s} onClick={() => setFilterStatus(s)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors capitalize ${filterStatus === s ? 'bg-[#22C55E]/20 text-[#22C55E] border border-[#22C55E]/30' : 'bg-[#162032] text-slate-400 border border-transparent hover:border-[#1e3a2e] hover:text-white'}`}>
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors capitalize ${filterStatus === s ? 'bg-[#22C55E]/20 text-[#22C55E] border border-[#F59E0B]/35' : 'bg-[#162032] text-slate-400 border border-transparent hover:border-[#3A3317] hover:text-white'}`}>
               {s === 'all' ? 'All' : s === 'on-track' ? 'On Track' : s === 'at-risk' ? 'At Risk' : 'Overdue'}
             </button>
           ))}
@@ -470,7 +470,7 @@ export const LecturerDashboard: React.FC<LecturerDashboardProps> = ({ onNavigate
   return (
     <div className="h-screen bg-[#0A1628] flex flex-col overflow-hidden">
       {/* ── TopBar ── */}
-      <header className="h-16 bg-[#0F1A2A] border-b border-[#22C55E]/10 flex items-center justify-between px-4 relative z-50 flex-shrink-0">
+      <header className="h-16 bg-[#0F1A2A] border-b border-[#F59E0B]/15 flex items-center justify-between px-4 relative z-50 flex-shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={() => setSidebarOpen(o => !o)} className="lg:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-[#162032] transition-colors">
             <Menu size={20} />
@@ -489,14 +489,14 @@ export const LecturerDashboard: React.FC<LecturerDashboardProps> = ({ onNavigate
               </svg>
             </div>
             <span className="text-sm"><span className="vertex-wordmark">Vertex</span></span>
-            <span className="px-2 py-0.5 rounded-md border border-[#22C55E]/30 bg-[#22C55E]/10 text-[#6EE7B7] text-[10px] font-bold uppercase tracking-wider">Lecturer</span>
+            <span className="px-2 py-0.5 rounded-md border border-[#F59E0B]/35 bg-[#F59E0B]/12 text-[#FCD34D] text-[10px] font-bold uppercase tracking-wider">Lecturer</span>
           </button>
         </div>
 
         <div className="flex items-center gap-2">
           {/* AI Insights */}
           <button onClick={() => setShowAI(o => !o)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${showAI ? 'bg-[#22C55E]/20 text-[#6EE7B7] border border-[#22C55E]/35 shadow-[0_10px_22px_rgba(34,197,94,0.16)]' : 'bg-[#162032] text-slate-400 border border-[#1e3a2e] hover:text-[#6EE7B7] hover:border-[#22C55E]/30 hover:shadow-[0_12px_24px_rgba(10,15,26,0.5)]'}`}>
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${showAI ? 'bg-[#22C55E]/20 text-[#6EE7B7] border border-[#F59E0B]/35 shadow-[0_10px_22px_rgba(34,197,94,0.16)]' : 'bg-[#162032] text-slate-400 border border-[#3A3317] hover:text-[#6EE7B7] hover:border-[#F59E0B]/35 hover:shadow-[0_12px_24px_rgba(10,15,26,0.5)]'}`}>
             <Sparkles size={13} />AI Insights
           </button>
 
@@ -512,8 +512,8 @@ export const LecturerDashboard: React.FC<LecturerDashboardProps> = ({ onNavigate
             <AnimatePresence>
               {showNotif && (
                 <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                  className="absolute right-0 top-full mt-2 w-80 bg-[#0F1A2A] rounded-xl border border-[#22C55E]/10 shadow-2xl overflow-hidden z-50">
-                  <div className="p-3 border-b border-[#22C55E]/10 flex items-center justify-between">
+                  className="absolute right-0 top-full mt-2 w-80 bg-[#0F1A2A] rounded-xl border border-[#F59E0B]/15 shadow-2xl overflow-hidden z-50">
+                  <div className="p-3 border-b border-[#F59E0B]/15 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-white">Notifications</h3>
                     <button onClick={() => setNotifications(n => n.map(x => ({ ...x, read: true })))}
                       className="text-[11px] text-[#22C55E] hover:underline">Mark all read</button>
@@ -546,8 +546,8 @@ export const LecturerDashboard: React.FC<LecturerDashboardProps> = ({ onNavigate
             <AnimatePresence>
               {showProfile && (
                 <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                  className="absolute right-0 top-full mt-2 w-48 bg-[#0F1A2A] rounded-xl border border-[#22C55E]/10 shadow-2xl overflow-hidden z-50">
-                  <div className="p-3 border-b border-[#22C55E]/10">
+                  className="absolute right-0 top-full mt-2 w-48 bg-[#0F1A2A] rounded-xl border border-[#F59E0B]/15 shadow-2xl overflow-hidden z-50">
+                  <div className="p-3 border-b border-[#F59E0B]/15">
                     <p className="text-xs font-semibold text-white">Dr. Tran Van Minh</p>
                     <p className="text-[11px] text-[#22C55E]">Lecturer</p>
                   </div>
@@ -578,7 +578,7 @@ export const LecturerDashboard: React.FC<LecturerDashboardProps> = ({ onNavigate
         {/* Main content */}
         <main className="flex-1 overflow-hidden flex flex-col">
           {/* Breadcrumb */}
-          <div className="px-6 py-3 border-b border-[#22C55E]/10 bg-[#0F1A2A] flex items-center gap-2 flex-shrink-0">
+          <div className="px-6 py-3 border-b border-[#F59E0B]/15 bg-[#0F1A2A] flex items-center gap-2 flex-shrink-0">
             <button onClick={() => handleNavSidebar('overview', null)} className="text-xs text-slate-500 hover:text-[#6EE7B7] transition-colors duration-200">Dashboard</button>
             {view === 'groups' && (
               <><span className="text-slate-700 text-xs">/</span><span className="text-xs text-[#22C55E] font-medium">Student Groups</span></>

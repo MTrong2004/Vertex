@@ -36,7 +36,6 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <ul className="space-y-2.5 text-sm text-slate-300">
               <li><button onClick={() => onNavigate?.('features')} className="footer-link">{t.footer.features2}</button></li>
               <li><button onClick={() => onNavigate?.('pricing')} className="footer-link">{t.footer.pricing2}</button></li>
-              <li><button onClick={() => onNavigate?.('dashboard')} className="footer-link">{t.footer.demo}</button></li>
               <li><button onClick={() => onNavigate?.('changelog')} className="footer-link">{t.footer.changelog}</button></li>
             </ul>
           </div>

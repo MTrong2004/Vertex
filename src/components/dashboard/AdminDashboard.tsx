@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Users, Bot, Sliders, LogOut, Search, 
@@ -7,6 +7,7 @@ import {
   Save, TrendingUp, Eye, Edit2, X, Download,
   BarChart3, FileText, AlertTriangle, Info, XCircle,
   CheckSquare, Square, ListChecks,
+  RefreshCw, ArrowLeftRight, ArrowUpDown,
 } from 'lucide-react';
 import {
   adminUserEntries, aiHistory, todayMetrics,
@@ -16,9 +17,50 @@ import {
 import { AdminUserEntry, AuditLogEntry, AdminNotification } from '../../types';
 import { Avatar } from '../ui/Avatar';
 import { useLang } from '../../contexts/LanguageContext';
+import websiteStructureMarkdown from '../../../website-structure.md?raw';
 
 interface AdminDashboardProps {
   onNavigate?: (page: string) => void;
+}
+
+interface SystemMapTreeNode {
+  id: string;
+  label: string;
+  route: string | null;
+  group: string;
+  depth: number;
+  children: SystemMapTreeNode[];
+}
+
+interface SystemMapNodeCard {
+  label: string;
+  route: string | null;
+  category: string;
+  nodeId: string;
+  anchorX: number;
+  anchorY: number;
+  expandable: boolean;
+  expanded: boolean;
+  childCount: number;
+}
+
+interface SystemMapParsed {
+  root: SystemMapTreeNode;
+  rawTree: string;
+  nodesById: Record<string, SystemMapTreeNode>;
+  routesByLabel: Record<string, string>;
+  totalCount: number;
+}
+
+const SYSTEM_MAP_INITIAL_ZOOM_OUT_FACTOR = 0.9;
+
+declare global {
+  interface Window {
+    mermaid?: {
+      initialize: (config: Record<string, unknown>) => void;
+      render: (id: string, definition: string) => Promise<{ svg: string }>;
+    };
+  }
 }
 
 // ─── Mini Bar Chart (pure SVG) ───
@@ -124,7 +166,7 @@ const actionColorMap: Record<string, string> = {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
   const { t } = useLang();
-  const [activeTab, setActiveTab] = useState<'users' | 'ai' | 'analytics' | 'auditlog' | 'config'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'ai' | 'analytics' | 'auditlog' | 'config' | 'sitemap'>('users');
   const [userSegment, setUserSegment] = useState<'all' | 'active' | 'banned' | 'paid' | 'free-trial'>('all');
   const [collapsed, setCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -151,6 +193,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [showBulkModal, setShowBulkModal] = useState<'ban' | 'unban' | 'quota' | null>(null);
   const [bulkQuotaValue, setBulkQuotaValue] = useState(50);
+  const [systemMapSvg, setSystemMapSvg] = useState('');
+  const [isSystemMapLoading, setIsSystemMapLoading] = useState(false);
+  const [systemMapError, setSystemMapError] = useState<string | null>(null);
+  const [isWideSystemMap, setIsWideSystemMap] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1280 : true));
+  const [systemMapRefreshKey, setSystemMapRefreshKey] = useState(0);
+  const [systemMapActivationKey, setSystemMapActivationKey] = useState(0);
+  const [systemMapQuickNav, setSystemMapQuickNav] = useState<SystemMapNodeCard | null>(null);
+  const [systemMapHoverCard, setSystemMapHoverCard] = useState<SystemMapNodeCard | null>(null);
+  const [systemMapExpandedNodes, setSystemMapExpandedNodes] = useState<Set<string>>(new Set());
+  const [systemMapInteractionVersion, setSystemMapInteractionVersion] = useState(0);
+  const systemMapContainerRef = useRef<HTMLDivElement | null>(null);
+  const systemMapViewportRef = useRef<HTMLDivElement | null>(null);
+  const systemMapRenderedSignatureRef = useRef<string>('');
+  const [mapSvgSize, setMapSvgSize] = useState({ w: 800, h: 600 });
+  const mapViewRef = useRef({ x: 0, y: 0, scale: 1 });
+  const mapFrameRef = useRef<number | null>(null);
+  const mapIsDragging = useRef(false);
+  const mapDragStartedAtRef = useRef(0);
+  const mapDragLast = useRef({ x: 0, y: 0 });
+  const mapHasMoved = useRef(false);
+  const systemMapRecoveryTimerRef = useRef<number | null>(null);
+  const systemMapRecoveryTimersRef = useRef<number[]>([]);
+  const systemMapRenderInFlightRef = useRef(false);
+  const systemMapFailedSignatureRef = useRef<string>('');
+  const systemMapViewInitializedRef = useRef(false);
+  const systemMapLastInteractionAtRef = useRef(0);
+  const systemMapAutoRecoverTimerRef = useRef<number | null>(null);
+  const systemMapLastHardResetAtRef = useRef(0);
+  const previousAdminTabRef = useRef<typeof activeTab>('users');
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -166,7 +237,955 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     { id: 'analytics' as const, label: t.admin.analytics, icon: <BarChart3 size={18} />, subtitle: t.admin.analyticsTabSubtitle },
     { id: 'auditlog' as const, label: t.admin.auditLog, icon: <FileText size={18} />, subtitle: t.admin.auditTabSubtitle },
     { id: 'config' as const, label: t.admin.config, icon: <Sliders size={18} />, subtitle: t.admin.configTabSubtitle },
+    { id: 'sitemap' as const, label: 'System Map', icon: <ListChecks size={18} />, subtitle: 'Visual website structure' },
   ];
+
+  useEffect(() => {
+    const onResize = () => {
+      setIsWideSystemMap(window.innerWidth >= 1280);
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const normalizeSystemMapLabel = useCallback((label: string) => label.replace(/\s+/g, ' ').trim(), []);
+  const stripRouteSuffixFromLabel = useCallback((label: string) =>
+    normalizeSystemMapLabel(label.replace(/\s*\(\/[^)]+\)\s*/g, ' ')), [normalizeSystemMapLabel]);
+  const stripIndicatorFromLabel = useCallback((label: string) => normalizeSystemMapLabel(label.replace(/[▸▼]\s*$/u, '')), [normalizeSystemMapLabel]);
+
+  const systemMapRouteFromLabel = useCallback((label: string): string | null => {
+    const routeMatch = label.match(/\((\/[^)]+)\)/);
+    if (routeMatch?.[1]) return routeMatch[1];
+
+    const clean = stripRouteSuffixFromLabel(label)
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const routeByLabel: Record<string, string> = {
+      landing: '/',
+      features: '/features',
+      pricing: '/pricing',
+      changelog: '/changelog',
+      resources: '/resources/docs',
+      documentation: '/resources/docs',
+      guides: '/resources/guide',
+      blog: '/resources/blog',
+      community: '/resources/community',
+      legal: '/legal/terms',
+      terms: '/legal/terms',
+      privacy: '/legal/privacy',
+      login: '/login',
+      workspace: '/dashboard',
+      'student workspace': '/dashboard',
+      dashboard: '/dashboard',
+      'active projects': '/dashboard',
+      'tasks today': '/dashboard',
+      'progress overview': '/dashboard',
+      projects: '/dashboard',
+      board: '/dashboard',
+      'ai planner': '/dashboard',
+      insights: '/dashboard',
+      members: '/dashboard',
+      files: '/dashboard',
+      timeline: '/dashboard',
+      calendar: '/dashboard',
+      settings: '/dashboard',
+      'lecturer workspace': '/lecturer',
+      overview: '/lecturer',
+      groups: '/lecturer',
+      'group detail': '/lecturer',
+      deadlines: '/lecturer',
+      'admin workspace': '/admin',
+      users: '/admin',
+      ai: '/admin',
+      analytics: '/admin',
+      'audit log': '/admin',
+      config: '/admin',
+    };
+
+    return routeByLabel[clean] ?? null;
+  }, [stripRouteSuffixFromLabel]);
+
+  const systemMapGroupFromLabel = useCallback((label: string) => {
+    const clean = stripRouteSuffixFromLabel(label)
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (clean === 'landing') return 'groupRoot';
+    if (clean === 'workspace') return 'groupWorkspace';
+    if (clean.includes('student workspace')) return 'groupStudent';
+    if (clean.includes('lecturer workspace')) return 'groupLecturer';
+    if (clean.includes('admin workspace')) return 'groupAdmin';
+    if (['features', 'pricing', 'changelog', 'resources', 'documentation', 'guides', 'blog', 'community', 'legal', 'terms', 'privacy', 'login'].includes(clean)) return 'groupPublic';
+    return 'groupSection';
+  }, [stripRouteSuffixFromLabel]);
+
+  const systemMapPageKeyFromRoute = useCallback((route: string | null): string | null => {
+    if (!route) return null;
+
+    const routeToPage: Record<string, string> = {
+      '/': 'landing',
+      '/features': 'features',
+      '/pricing': 'pricing',
+      '/changelog': 'changelog',
+      '/login': 'login',
+      '/dashboard': 'dashboard',
+      '/lecturer': 'lecturer',
+      '/resources': 'resources',
+      '/resources/docs': 'docs',
+      '/resources/guide': 'guide',
+      '/resources/blog': 'blog',
+      '/resources/community': 'community',
+      '/legal': 'legal',
+      '/legal/terms': 'terms',
+      '/legal/privacy': 'privacy',
+    };
+
+    return routeToPage[route] ?? null;
+  }, []);
+
+  const openSystemMapRoute = useCallback((route: string | null) => {
+    if (!route) return;
+
+    const pageKey = systemMapPageKeyFromRoute(route);
+    if (pageKey && onNavigate) {
+      onNavigate(pageKey);
+      return;
+    }
+
+    window.location.assign(route);
+  }, [onNavigate, systemMapPageKeyFromRoute]);
+
+  const systemMapParsed = useMemo<SystemMapParsed>(() => {
+    const fenced = websiteStructureMarkdown.match(/```text\s*([\s\S]*?)```/);
+    const rawTree = fenced?.[1] ? fenced[1].trim() : '';
+
+    if (!rawTree) {
+      const fallbackRoot: SystemMapTreeNode = {
+        id: 'landing_0',
+        label: 'Landing',
+        route: '/',
+        group: 'groupRoot',
+        depth: 0,
+        children: [],
+      };
+      return {
+        root: fallbackRoot,
+        rawTree,
+        nodesById: { [fallbackRoot.id]: fallbackRoot },
+        routesByLabel: { Landing: '/' },
+        totalCount: 1,
+      };
+    }
+
+    const lines = rawTree
+      .split('\n')
+      .map((line) => line.trimEnd())
+      .filter(Boolean);
+
+    const nodesById: Record<string, SystemMapTreeNode> = {};
+    const routesByLabel: Record<string, string> = {};
+    const stack: SystemMapTreeNode[] = [];
+
+    const toNodeId = (label: string, index: number) => {
+      const base = stripRouteSuffixFromLabel(label)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_|_$/g, '');
+      return `${base || 'node'}_${index}`;
+    };
+
+    const registerRoute = (label: string, route: string) => {
+      routesByLabel[normalizeSystemMapLabel(label)] = route;
+      routesByLabel[stripRouteSuffixFromLabel(label)] = route;
+      routesByLabel[stripIndicatorFromLabel(label)] = route;
+    };
+
+    let rootNode: SystemMapTreeNode | null = null;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const match = i === 0 ? null : line.match(/^([│ ]*)(├|└)\s(.+)$/);
+      const depth = i === 0 ? 0 : Math.floor((match?.[1]?.length ?? 0) / 2) + 1;
+      const labelRaw = i === 0 ? line.trim() : (match?.[3]?.trim() ?? '');
+      const label = stripRouteSuffixFromLabel(labelRaw);
+      if (!label) continue;
+
+      while (stack.length > depth) {
+        stack.pop();
+      }
+
+      const parent = stack[stack.length - 1] ?? null;
+      const directGroup = systemMapGroupFromLabel(labelRaw);
+      const group = directGroup !== 'groupSection' ? directGroup : (parent?.group ?? 'groupSection');
+      const route = systemMapRouteFromLabel(labelRaw) ?? systemMapRouteFromLabel(label);
+      const node: SystemMapTreeNode = {
+        id: toNodeId(labelRaw, i),
+        label,
+        route,
+        group,
+        depth,
+        children: [],
+      };
+
+      nodesById[node.id] = node;
+      if (route) registerRoute(labelRaw, route);
+      if (route) registerRoute(label, route);
+
+      if (parent) {
+        parent.children.push(node);
+      } else {
+        rootNode = node;
+      }
+
+      stack.push(node);
+    }
+
+    const root: SystemMapTreeNode = rootNode ?? {
+      id: 'landing_0',
+      label: 'Landing',
+      route: '/',
+      group: 'groupRoot',
+      depth: 0,
+      children: [],
+    };
+
+    return {
+      root,
+      rawTree,
+      nodesById,
+      routesByLabel,
+      totalCount: Object.keys(nodesById).length || 1,
+    };
+  }, [normalizeSystemMapLabel, stripIndicatorFromLabel, systemMapGroupFromLabel, systemMapRouteFromLabel]);
+
+  useEffect(() => {
+    const nextExpanded = new Set<string>();
+    const parsedNodes = Object.values(systemMapParsed.nodesById as Record<string, SystemMapTreeNode>);
+    parsedNodes.forEach((node) => {
+      if (['Landing', 'Login', 'Workspace', 'Student Workspace'].includes(node.label)) {
+        nextExpanded.add(node.id);
+      }
+    });
+
+    if (nextExpanded.size === 0 && systemMapParsed.root?.id) {
+      nextExpanded.add(systemMapParsed.root.id);
+    }
+
+    setSystemMapExpandedNodes(nextExpanded);
+  }, [systemMapParsed]);
+
+  const systemMapRouteLookup = useMemo(() => {
+    return systemMapParsed.routesByLabel;
+  }, [systemMapParsed]);
+
+  const systemMapNodeCount = useMemo(() => systemMapParsed.totalCount, [systemMapParsed]);
+
+  const systemMapVisibleGraph = useMemo(() => {
+    const root = systemMapParsed.root;
+    const nodes: Array<SystemMapTreeNode & { displayLabel: string }> = [];
+    const edges: Array<{ from: string; to: string }> = [];
+    const groupedNodeIds: Record<string, string[]> = {
+      groupRoot: [],
+      groupPublic: [],
+      groupWorkspace: [],
+      groupStudent: [],
+      groupAdmin: [],
+      groupLecturer: [],
+      groupSection: [],
+    };
+
+    const visit = (node: SystemMapTreeNode) => {
+      const displayLabel = node.label;
+      nodes.push({ ...node, displayLabel });
+      groupedNodeIds[node.group]?.push(node.id);
+      node.children.forEach((child) => {
+        edges.push({ from: node.id, to: child.id });
+        visit(child);
+      });
+    };
+
+    visit(root);
+
+    return { nodes, edges, groupedNodeIds };
+  }, [systemMapParsed]);
+
+  const systemMapVisibleNodeLookup = useMemo(() => {
+    const lookup: Record<string, Array<SystemMapTreeNode & { displayLabel: string }>> = {};
+    systemMapVisibleGraph.nodes.forEach((node) => {
+      const key = normalizeSystemMapLabel(node.label);
+      if (!lookup[key]) {
+        lookup[key] = [];
+      }
+      lookup[key].push(node);
+    });
+    return lookup;
+  }, [normalizeSystemMapLabel, systemMapVisibleGraph.nodes]);
+
+  const systemMapDefinition = useMemo(() => {
+    if (!systemMapParsed.rawTree) {
+      return `flowchart ${isWideSystemMap ? 'LR' : 'TD'}
+    LandingPage["Landing Page"] --> Features["Features"]
+    LandingPage --> Pricing["Pricing"]
+    LandingPage --> Blog["Blog"]
+    LandingPage --> Login["Login"]
+    Login --> Dashboard["Dashboard"]
+    Dashboard --> Projects["Projects"]
+    Dashboard --> Settings["Settings"]
+    Dashboard --> Billing["Billing"]`;
+    }
+
+    const escapeLabel = (label: string) => label.replace(/"/g, '\\"');
+
+    const buildClassLines = (nodeIds: string[], className: string): string[] => {
+      const linesOut: string[] = [];
+      const chunkSize = 24;
+      for (let i = 0; i < nodeIds.length; i += chunkSize) {
+        const chunk = nodeIds.slice(i, i + chunkSize);
+        linesOut.push(`    class ${chunk.join(',')} ${className}`);
+      }
+      return linesOut;
+    };
+
+    const nodeLines = systemMapVisibleGraph.nodes.map((node) => `    ${node.id}["${escapeLabel(node.displayLabel)}"]`);
+    const edgeLines = systemMapVisibleGraph.edges.map((edge) => `    ${edge.from} --> ${edge.to}`);
+
+    const classDefLines = [
+      '    classDef groupRoot fill:#14532D,stroke:#A7F3D0,color:#ECFCCB,stroke-width:2px;',
+      '    classDef groupPublic fill:#0A4D68,stroke:#67E8F9,color:#ECFEFF,stroke-width:1.6px;',
+      '    classDef groupWorkspace fill:#1E40AF,stroke:#93C5FD,color:#EFF6FF,stroke-width:1.6px;',
+      '    classDef groupStudent fill:#365314,stroke:#BEF264,color:#F7FEE7,stroke-width:1.6px;',
+      '    classDef groupAdmin fill:#9A3412,stroke:#FDBA74,color:#FFF7ED,stroke-width:1.6px;',
+      '    classDef groupLecturer fill:#6D28D9,stroke:#C4B5FD,color:#F5F3FF,stroke-width:1.6px;',
+      '    classDef groupSection fill:#1E293B,stroke:#94A3B8,color:#F1F5F9,stroke-width:1.3px;',
+    ];
+
+    const groupedEntries = Object.entries(systemMapVisibleGraph.groupedNodeIds) as Array<[string, string[]]>;
+    const classLines = groupedEntries
+      .flatMap(([groupName, ids]) => (ids.length ? buildClassLines(ids, groupName) : []));
+
+    return [
+      `flowchart ${isWideSystemMap ? 'LR' : 'TD'}`,
+      '    %% Auto-generated from website-structure.md',
+      ...classDefLines,
+      ...nodeLines,
+      ...edgeLines,
+      '    linkStyle default stroke:#64748B,stroke-width:1.4px,opacity:0.9;',
+      ...classLines,
+    ].join('\n');
+  }, [isWideSystemMap, systemMapParsed.rawTree, systemMapVisibleGraph]);
+
+  useEffect(() => {
+    if (activeTab !== 'sitemap') return;
+
+    const renderSignature = `${systemMapDefinition}::${systemMapRefreshKey}::${systemMapActivationKey}`;
+    if (systemMapRenderedSignatureRef.current === renderSignature && systemMapSvg && !systemMapError) {
+      return;
+    }
+
+    // If this exact signature already failed, do not auto-retry in a tight loop.
+    if (systemMapFailedSignatureRef.current === renderSignature) {
+      return;
+    }
+
+    if (systemMapRenderInFlightRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadScript = async (selector: string, src: string, errorMessage: string, datasetFlag: string) => {
+      await new Promise<void>((resolve, reject) => {
+        const existingScript = document.querySelector<HTMLScriptElement>(selector);
+        if (existingScript) {
+          if (existingScript.dataset.loaded === 'true') {
+            resolve();
+            return;
+          }
+          existingScript.addEventListener('load', () => resolve(), { once: true });
+          existingScript.addEventListener('error', () => reject(new Error(errorMessage)), { once: true });
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.setAttribute(datasetFlag, 'true');
+        script.dataset.loaded = 'false';
+        script.onload = () => {
+          script.dataset.loaded = 'true';
+          resolve();
+        };
+        script.onerror = () => reject(new Error(errorMessage));
+        document.head.appendChild(script);
+      });
+    };
+
+    const ensureMermaidLoaded = async () => {
+      if (window.mermaid) return;
+      await loadScript(
+        'script[data-mermaid-cdn="true"]',
+        'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js',
+        'Failed to load Mermaid CDN',
+        'data-mermaid-cdn',
+      );
+    };
+
+    const renderSystemMap = async () => {
+      try {
+        systemMapRenderInFlightRef.current = true;
+        setIsSystemMapLoading(true);
+        setSystemMapError(null);
+        await ensureMermaidLoaded();
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+        if (!window.mermaid) {
+          throw new Error('Diagram library is not available in browser context.');
+        }
+
+        window.mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'loose',
+          theme: 'dark',
+          flowchart: {
+            useMaxWidth: false,
+            // SVG text stays crisper than HTML labels when the full map is zoomed/scaled.
+            htmlLabels: false,
+            curve: 'basis',
+            nodeSpacing: 72,
+            rankSpacing: 96,
+          },
+        });
+
+        const renderId = `system-map-${Date.now()}`;
+        const { svg } = await window.mermaid.render(renderId, systemMapDefinition);
+        if (!cancelled) {
+          systemMapRenderedSignatureRef.current = renderSignature;
+          systemMapFailedSignatureRef.current = '';
+          systemMapViewInitializedRef.current = false;
+          const wMatch = svg.match(/\bwidth="([\d.]+)"/);
+          const hMatch = svg.match(/\bheight="([\d.]+)"/);
+          const w = wMatch ? parseFloat(wMatch[1]) : 800;
+          const h = hMatch ? parseFloat(hMatch[1]) : 600;
+          if (w > 0 && h > 0) setMapSvgSize({ w, h });
+          setSystemMapSvg(svg);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          systemMapRenderedSignatureRef.current = '';
+          systemMapFailedSignatureRef.current = renderSignature;
+          setSystemMapError(error instanceof Error ? error.message : 'Unable to render System Map.');
+          setSystemMapSvg('');
+        }
+      } finally {
+        systemMapRenderInFlightRef.current = false;
+        setIsSystemMapLoading(false);
+      }
+    };
+
+    void renderSystemMap();
+
+    return () => {
+      cancelled = true;
+      systemMapRenderInFlightRef.current = false;
+    };
+  }, [activeTab, systemMapActivationKey, systemMapDefinition, systemMapRefreshKey, systemMapError, systemMapSvg]);
+
+  const syncMapTransform = useCallback((nextView?: { x: number; y: number; scale: number }) => {
+    if (nextView) {
+      mapViewRef.current = nextView;
+    }
+
+    if (mapFrameRef.current !== null) return;
+    mapFrameRef.current = window.requestAnimationFrame(() => {
+      mapFrameRef.current = null;
+      const viewport = systemMapViewportRef.current;
+      if (!viewport) return;
+      const { x, y, scale } = mapViewRef.current;
+      const snappedX = Math.round(x);
+      const snappedY = Math.round(y);
+      const snappedScale = Math.max(0.1, Math.min(12, Math.round(scale * 1000) / 1000));
+      viewport.style.transform = `translate(${snappedX}px, ${snappedY}px) scale(${snappedScale})`;
+    });
+  }, []);
+
+  const clearSystemMapPointerState = useCallback(() => {
+    const container = systemMapContainerRef.current;
+
+    mapIsDragging.current = false;
+    mapHasMoved.current = false;
+
+    if (container) {
+      container.style.cursor = 'grab';
+    }
+  }, []);
+
+  const clearSystemMapRecoveryTimers = useCallback(() => {
+    if (systemMapRecoveryTimerRef.current !== null) {
+      window.clearTimeout(systemMapRecoveryTimerRef.current);
+      systemMapRecoveryTimerRef.current = null;
+    }
+
+    if (systemMapAutoRecoverTimerRef.current !== null) {
+      window.clearTimeout(systemMapAutoRecoverTimerRef.current);
+      systemMapAutoRecoverTimerRef.current = null;
+    }
+
+    systemMapRecoveryTimersRef.current.forEach((timer) => {
+      window.clearTimeout(timer);
+    });
+    systemMapRecoveryTimersRef.current = [];
+  }, []);
+
+  const requestHardSystemMapReset = useCallback((force = false) => {
+    if (activeTab !== 'sitemap') return;
+
+    const now = Date.now();
+    const elapsed = now - systemMapLastHardResetAtRef.current;
+    if (!force && (elapsed < 1200 || systemMapRenderInFlightRef.current)) {
+      return;
+    }
+
+    systemMapLastHardResetAtRef.current = now;
+    systemMapRenderedSignatureRef.current = '';
+    systemMapFailedSignatureRef.current = '';
+    systemMapViewInitializedRef.current = false;
+    setSystemMapRefreshKey((current) => current + 1);
+    setSystemMapActivationKey((current) => current + 1);
+  }, [activeTab]);
+
+  // ── Auto-fit SVG to canvas when it renders ──
+  const resetMapView = useCallback(() => {
+    const container = systemMapContainerRef.current;
+    if (!container) return;
+    const cW = container.clientWidth;
+    const cH = container.clientHeight;
+    const { w: svgW, h: svgH } = mapSvgSize;
+    if (!cW || !cH || !svgW || !svgH) return;
+    const fitScale = Math.min((cW * 0.92) / svgW, (cH * 0.92) / svgH, 1);
+    const scale = Math.max(0.1, fitScale * SYSTEM_MAP_INITIAL_ZOOM_OUT_FACTOR);
+    syncMapTransform({ x: (cW - svgW * scale) / 2, y: (cH - svgH * scale) / 2, scale });
+    systemMapViewInitializedRef.current = true;
+  }, [mapSvgSize, syncMapTransform]);
+
+  const refreshSystemMapViewport = useCallback((rerenderIfMissing = false) => {
+    if (activeTab !== 'sitemap') return;
+
+    clearSystemMapPointerState();
+    setSystemMapHoverCard(null);
+
+    clearSystemMapRecoveryTimers();
+
+    const container = systemMapContainerRef.current;
+    const hasViewport = Boolean(systemMapViewportRef.current);
+    const hasRenderableSize = Boolean(container && container.clientWidth > 0 && container.clientHeight > 0);
+
+    if (!hasViewport && systemMapSvg) {
+      window.requestAnimationFrame(() => {
+        if (activeTab !== 'sitemap') return;
+        if (!systemMapViewInitializedRef.current) {
+          resetMapView();
+        }
+        syncMapTransform();
+      });
+      return;
+    }
+
+    if (rerenderIfMissing && (!systemMapSvg || !hasRenderableSize)) {
+      requestHardSystemMapReset(true);
+      return;
+    }
+
+    systemMapRecoveryTimerRef.current = window.setTimeout(() => {
+      if (activeTab !== 'sitemap') return;
+      clearSystemMapPointerState();
+      if (!systemMapViewInitializedRef.current) {
+        resetMapView();
+      }
+      syncMapTransform();
+    }, 80);
+  }, [activeTab, clearSystemMapPointerState, clearSystemMapRecoveryTimers, requestHardSystemMapReset, resetMapView, syncMapTransform, systemMapSvg]);
+
+  const recoverSystemMapAfterVisibilityChange = useCallback(() => {
+    refreshSystemMapViewport(false);
+  }, [refreshSystemMapViewport]);
+
+  useEffect(() => {
+    if (activeTab !== 'sitemap' || !systemMapSvg) return;
+    const timer = window.setTimeout(() => {
+      if (!systemMapViewInitializedRef.current) {
+        resetMapView();
+      } else {
+        syncMapTransform();
+      }
+    }, 40);
+    let resizeObserver: ResizeObserver | null = null;
+
+    const container = systemMapContainerRef.current;
+    if (container && typeof ResizeObserver !== 'undefined') {
+      let rafPending = false;
+      resizeObserver = new ResizeObserver(() => {
+        if (rafPending) return;
+        rafPending = true;
+        window.requestAnimationFrame(() => {
+          rafPending = false;
+          if (!systemMapViewInitializedRef.current) {
+            resetMapView();
+            return;
+          }
+          syncMapTransform();
+        });
+      });
+      resizeObserver.observe(container);
+    }
+
+    return () => {
+      window.clearTimeout(timer);
+      resizeObserver?.disconnect();
+      if (mapFrameRef.current !== null) {
+        window.cancelAnimationFrame(mapFrameRef.current);
+        mapFrameRef.current = null;
+      }
+    };
+  }, [activeTab, systemMapSvg, resetMapView, syncMapTransform]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        clearSystemMapPointerState();
+        setSystemMapHoverCard(null);
+        return;
+      }
+
+      if (document.visibilityState === 'visible') {
+        recoverSystemMapAfterVisibilityChange();
+      }
+    };
+
+    const handleWindowBlur = () => {
+      clearSystemMapPointerState();
+      setSystemMapHoverCard(null);
+    };
+
+    const handleWindowFocus = () => {
+      recoverSystemMapAfterVisibilityChange();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
+
+      clearSystemMapRecoveryTimers();
+    };
+  }, [clearSystemMapPointerState, clearSystemMapRecoveryTimers, recoverSystemMapAfterVisibilityChange]);
+
+  // ── Map interaction: wheel zoom, drag pan, node hover/click ──
+  useEffect(() => {
+    if (activeTab !== 'sitemap' || !systemMapSvg || !systemMapContainerRef.current) return;
+    const container = systemMapContainerRef.current;
+    const viewport = systemMapViewportRef.current;
+    container.style.cursor = 'grab';
+
+    const resolveNodeElement = (target: EventTarget | null, path?: EventTarget[]) => {
+      if (target instanceof Element) {
+        const directMatch = target.closest('g.node, .node') as SVGGElement | null;
+        if (directMatch) return directMatch;
+      }
+
+      const eventPath = path ?? [];
+      for (const entry of eventPath) {
+        if (!(entry instanceof Element)) continue;
+        if (entry.classList.contains('node') && entry instanceof SVGGElement) {
+          return entry;
+        }
+        const nestedMatch = entry.closest?.('g.node, .node') as SVGGElement | null;
+        if (nestedMatch) return nestedMatch;
+      }
+
+      return null;
+    };
+
+    const nodeCategoryFromEl = (nodeEl: SVGGElement) => {
+      const groupClasses = ['groupRoot', 'groupPublic', 'groupWorkspace', 'groupStudent', 'groupAdmin', 'groupLecturer', 'groupSection'];
+      return Array.from(nodeEl.classList).find((c) => groupClasses.includes(c)) ?? 'groupSection';
+    };
+
+    const getNodeAnchor = (nodeEl: SVGGElement) => {
+      const containerRect = container.getBoundingClientRect();
+      const nodeRect = nodeEl.getBoundingClientRect();
+      if (nodeRect.width > 0 && nodeRect.height > 0) {
+        return {
+          anchorX: nodeRect.right - containerRect.left,
+          anchorY: nodeRect.top - containerRect.top + nodeRect.height / 2,
+        };
+      }
+
+      try {
+        const box = nodeEl.getBBox();
+        return { anchorX: box.x + box.width, anchorY: box.y + box.height / 2 };
+      } catch {
+        return { anchorX: 0, anchorY: 0 };
+      }
+    };
+
+    const getNodeInfo = (nodeEl: SVGGElement) => {
+      const rawLabel = normalizeSystemMapLabel(nodeEl.textContent || '');
+      const label = stripIndicatorFromLabel(rawLabel);
+      const nodeId = nodeEl.id || '';
+      const candidateNodes = systemMapVisibleNodeLookup[label] ?? [];
+      const categoryFromEl = nodeCategoryFromEl(nodeEl);
+      const nodeMeta = candidateNodes.find((node) => node.group === categoryFromEl) ?? candidateNodes[0] ?? (nodeId ? systemMapParsed.nodesById[nodeId] : null);
+        const route = nodeMeta?.route ?? systemMapRouteLookup[label] ?? null;
+      if (!label) return null;
+      const category = nodeMeta?.group ?? categoryFromEl;
+      const { anchorX, anchorY } = getNodeAnchor(nodeEl);
+      return {
+        label,
+        route,
+        category,
+        nodeId: nodeMeta?.id ?? (nodeId || `${label}-${route}`),
+        anchorX,
+        anchorY,
+        expandable: (nodeMeta?.children.length ?? 0) > 0,
+        expanded: false,
+        childCount: nodeMeta?.children.length ?? 0,
+      };
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      systemMapLastInteractionAtRef.current = Date.now();
+      e.preventDefault();
+      e.stopPropagation();
+      setSystemMapHoverCard(null);
+      const rect = container.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const prev = mapViewRef.current;
+      const factor = e.deltaY < 0 ? 1.12 : 0.88;
+      const ns = Math.max(0.1, Math.min(12, prev.scale * factor));
+      const r = ns / prev.scale;
+      syncMapTransform({ x: mx - (mx - prev.x) * r, y: my - (my - prev.y) * r, scale: ns });
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      systemMapLastInteractionAtRef.current = Date.now();
+      if ((e.target as Element)?.closest?.('[data-map-quick-nav]')) return;
+      if ((e.target as Element)?.closest?.('[data-map-hover-card]')) return;
+      if (e.button !== 0) return;
+
+      const nodeEl = resolveNodeElement(e.target, e.composedPath());
+      if (nodeEl) {
+        mapIsDragging.current = false;
+        return;
+      }
+
+      mapIsDragging.current = true;
+      mapDragStartedAtRef.current = Date.now();
+      mapHasMoved.current = false;
+      mapDragLast.current = { x: e.clientX, y: e.clientY };
+      container.style.cursor = 'grabbing';
+      setSystemMapHoverCard(null);
+      setSystemMapQuickNav(null);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      systemMapLastInteractionAtRef.current = Date.now();
+      if (!mapIsDragging.current) {
+        const nodeEl = resolveNodeElement(e.target, e.composedPath());
+        if (!nodeEl) {
+          setSystemMapHoverCard(null);
+          return;
+        }
+
+        const info = getNodeInfo(nodeEl);
+        if (!info) {
+          setSystemMapHoverCard(null);
+          return;
+        }
+
+        setSystemMapHoverCard((prev) => {
+          if (
+            prev &&
+            prev.nodeId === info.nodeId &&
+            prev.anchorX === info.anchorX &&
+            prev.anchorY === info.anchorY
+          ) {
+            return prev;
+          }
+          return info;
+        });
+        return;
+      }
+
+      if (!mapIsDragging.current) return;
+      const dx = e.clientX - mapDragLast.current.x;
+      const dy = e.clientY - mapDragLast.current.y;
+      if (e.buttons === 0) {
+        stopDrag();
+        return;
+      }
+      if (Math.abs(dx) + Math.abs(dy) > 2) {
+        mapHasMoved.current = true;
+      }
+      mapDragLast.current = { x: e.clientX, y: e.clientY };
+      const prev = mapViewRef.current;
+      syncMapTransform({ ...prev, x: prev.x + dx, y: prev.y + dy });
+    };
+
+    const stopDrag = () => {
+      clearSystemMapPointerState();
+      window.setTimeout(() => {
+        mapHasMoved.current = false;
+      }, 0);
+    };
+
+    const onPointerUp = () => {
+      stopDrag();
+    };
+
+    const onPointerLeave = () => {
+      if (mapIsDragging.current) {
+        stopDrag();
+        return;
+      }
+
+      setSystemMapHoverCard(null);
+    };
+
+    const onClick = (e: MouseEvent) => {
+      systemMapLastInteractionAtRef.current = Date.now();
+      if ((e.target as Element)?.closest?.('[data-map-quick-nav]')) return;
+      if ((e.target as Element)?.closest?.('[data-map-hover-card]')) return;
+      if (mapIsDragging.current || mapHasMoved.current) return;
+
+      const nodeEl = resolveNodeElement(e.target, e.composedPath());
+      if (!nodeEl) { setSystemMapQuickNav(null); return; }
+
+      const info = getNodeInfo(nodeEl);
+      if (!info) { setSystemMapQuickNav(null); return; }
+
+      e.preventDefault();
+      setSystemMapQuickNav(info);
+    };
+
+    const onDblClick = (e: MouseEvent) => {
+      e.preventDefault();
+      resetMapView();
+    };
+
+    container.addEventListener('wheel', onWheel, { passive: false });
+    viewport?.querySelectorAll('g.node').forEach((node) => {
+      (node as SVGGElement).style.cursor = 'pointer';
+    });
+    container.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('pointermove', onPointerMove);
+    container.addEventListener('pointerup', onPointerUp);
+    container.addEventListener('pointercancel', onPointerUp);
+    container.addEventListener('pointerleave', onPointerLeave);
+    container.addEventListener('click', onClick);
+    container.addEventListener('dblclick', onDblClick);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+
+    return () => {
+      container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('pointerdown', onPointerDown);
+      container.removeEventListener('pointermove', onPointerMove);
+      container.removeEventListener('pointerup', onPointerUp);
+      container.removeEventListener('pointercancel', onPointerUp);
+      container.removeEventListener('pointerleave', onPointerLeave);
+      container.removeEventListener('click', onClick);
+      container.removeEventListener('dblclick', onDblClick);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+      container.style.cursor = '';
+      stopDrag();
+    };
+  }, [activeTab, clearSystemMapPointerState, normalizeSystemMapLabel, stripIndicatorFromLabel, systemMapParsed.nodesById, systemMapRouteLookup, systemMapSvg, systemMapVisibleNodeLookup, resetMapView, syncMapTransform, systemMapInteractionVersion]);
+
+  useEffect(() => {
+    if (activeTab !== 'sitemap') return;
+
+    const watchdog = window.setInterval(() => {
+      if (!mapIsDragging.current) return;
+
+      const stalledFor = Date.now() - mapDragStartedAtRef.current;
+      if (stalledFor < 900) return;
+
+      clearSystemMapPointerState();
+      setSystemMapHoverCard(null);
+      setSystemMapQuickNav(null);
+      mapDragStartedAtRef.current = Date.now();
+    }, 260);
+
+    return () => {
+      window.clearInterval(watchdog);
+    };
+  }, [activeTab, clearSystemMapPointerState]);
+
+  useEffect(() => {
+    const previousTab = previousAdminTabRef.current;
+    previousAdminTabRef.current = activeTab;
+
+    if (activeTab !== 'sitemap') {
+      clearSystemMapRecoveryTimers();
+      clearSystemMapPointerState();
+      setSystemMapQuickNav(null);
+      setSystemMapHoverCard(null);
+      return;
+    }
+
+    clearSystemMapPointerState();
+    setSystemMapQuickNav(null);
+    setSystemMapHoverCard(null);
+
+    if (previousTab !== 'sitemap') {
+      // Mirror the manual toolbar recovery (toggle/refresh buttons) on tab entry.
+      setSystemMapInteractionVersion((current) => current + 1);
+      systemMapRenderedSignatureRef.current = '';
+      systemMapFailedSignatureRef.current = '';
+      systemMapViewInitializedRef.current = false;
+      systemMapLastInteractionAtRef.current = Date.now();
+      setSystemMapRefreshKey((current) => current + 1);
+      setSystemMapActivationKey((current) => current + 1);
+
+      // Watchdog: if map is still non-interactive after entry, auto-run recovery once.
+      if (systemMapAutoRecoverTimerRef.current !== null) {
+        window.clearTimeout(systemMapAutoRecoverTimerRef.current);
+      }
+      const entryStamp = systemMapLastInteractionAtRef.current;
+      systemMapAutoRecoverTimerRef.current = window.setTimeout(() => {
+        if (activeTab !== 'sitemap') return;
+        if (systemMapLastInteractionAtRef.current !== entryStamp) return;
+        setSystemMapInteractionVersion((current) => current + 1);
+        requestHardSystemMapReset(true);
+      }, 650);
+      return;
+    }
+
+    if (systemMapSvg) {
+      refreshSystemMapViewport();
+      return;
+    }
+
+    systemMapRenderedSignatureRef.current = '';
+    setSystemMapActivationKey((current) => current + 1);
+  }, [activeTab, clearSystemMapPointerState, clearSystemMapRecoveryTimers, refreshSystemMapViewport, requestHardSystemMapReset, systemMapSvg]);
+
+  useEffect(() => {
+    if (!systemMapSvg) {
+      setSystemMapQuickNav(null);
+      setSystemMapHoverCard(null);
+    }
+  }, [systemMapSvg]);
 
   // Filtered users
   const filteredUsers = useMemo(() => {
@@ -359,6 +1378,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     ],
     auditlog: [],
     config: [],
+    sitemap: [],
   }[activeTab];
 
   useEffect(() => {
@@ -377,11 +1397,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     <div className="relative flex h-screen bg-[#0A0F1A] overflow-hidden">
       <div className="pointer-events-none absolute -top-24 left-1/2 h-[460px] w-[820px] -translate-x-1/2 rounded-full bg-gradient-to-br from-[#F97316]/8 via-[#0EA5E9]/8 to-[#38BDF8]/7 blur-[120px]" />
       {/* ─── Sidebar ─── */}
-      <aside className={`relative z-10 bg-[#0F1A2A]/88 backdrop-blur-xl border-r border-[#22C55E]/12 transition-all duration-300 flex flex-col ${collapsed ? 'w-[60px]' : 'w-64'}`}>
+      <aside className={`relative z-30 bg-[#0F1A2A] border-r border-[#22C55E]/18 transition-all duration-300 flex flex-col ${collapsed ? 'w-[60px]' : 'w-64'}`}>
         <div className="flex flex-col h-full relative">
           {/* Logo */}
-          <div className={`p-4 border-b border-[#22C55E]/10 flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'}`}>
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#22C55E] via-[#84CC16] to-[#EAB308] flex items-center justify-center text-white flex-shrink-0">
+          <div className={`vertex-brand p-4 border-b border-[#22C55E]/10 flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'}`}>
+            <div className="vertex-mark w-8 h-8 rounded-lg flex items-center justify-center text-white flex-shrink-0">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                 <circle cx="6" cy="6" r="3" fill="currentColor" fillOpacity="0.84" />
                 <circle cx="18" cy="6" r="3" fill="currentColor" fillOpacity="0.84" />
@@ -391,7 +1411,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             </div>
             {!collapsed && (
               <div className="min-w-0 flex items-center gap-2">
-                <span className="font-display font-bold text-[#86EFAC] text-[1.02rem] tracking-tight truncate">Vertex</span>
+                <span className="font-display text-xl tracking-tight vertex-wordmark truncate">Vertex</span>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-500/14 border border-red-500/30 text-red-300 uppercase tracking-wide">Admin</span>
               </div>
             )}
@@ -399,7 +1419,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
           {/* Collapse toggle */}
           <button onClick={() => setCollapsed(c => !c)}
-            className="hidden lg:flex absolute -right-3 top-5 z-40 w-6 h-6 rounded-full bg-[#162032] border border-[#22C55E]/20 items-center justify-center text-slate-400 hover:text-[#22C55E] hover:border-[#22C55E]/50 transition-all shadow-md">
+            className="hidden lg:flex absolute -right-3 top-5 z-[120] w-6 h-6 rounded-full bg-[#162032] border border-[#22C55E]/25 items-center justify-center text-slate-200 hover:text-[#22C55E] hover:border-[#22C55E]/55 transition-all shadow-md pointer-events-auto">
             {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
           </button>
 
@@ -408,8 +1428,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             {navItems.map(item => (
               <button key={item.id} onClick={() => { setActiveTab(item.id); setSearchQuery(''); setSelectedUserIds(new Set()); setUserSegment('all'); }}
                 title={collapsed ? item.label : undefined}
-                className={`flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${activeTab === item.id ? 'text-white bg-[#22C55E]/15 border border-[#22C55E]/20' : 'text-slate-400 hover:bg-[#162032] hover:text-white'} ${collapsed ? 'justify-center' : 'gap-3'}`}>
-                <span className={activeTab === item.id ? 'text-[#22C55E]' : ''}>{item.icon}</span>
+                className={`flex items-center w-full px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors ${activeTab === item.id ? 'text-white bg-[#22C55E]/18 border border-[#22C55E]/30' : 'text-slate-200 hover:bg-[#162032] hover:text-white'} ${collapsed ? 'justify-center' : 'gap-3'}`}>
+                <span className={activeTab === item.id ? 'text-[#22C55E]' : 'text-slate-300'}>{item.icon}</span>
                 {!collapsed && <span className="leading-tight">{item.label}</span>}
               </button>
             ))}
@@ -419,7 +1439,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           {!collapsed && (
             <div className="p-3 border-t border-[#22C55E]/10">
               <button onClick={() => setShowSignOutConfirm(true)}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors">
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-200 hover:text-red-300 rounded-lg hover:bg-red-500/12 transition-colors">
                 <LogOut size={16} />
                 <span>{t.admin.signOut}</span>
               </button>
@@ -429,12 +1449,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       </aside>
 
       {/* ─── Main Content ─── */}
-      <main className="relative z-10 flex-1 overflow-y-auto">
+      <main className={`relative z-10 flex-1 ${activeTab === 'sitemap' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
         {/* Top bar */}
-        <header className="sticky top-0 z-20 bg-[#0A0F1A]/80 backdrop-blur-xl border-b border-[#22C55E]/10 px-6 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-20 bg-[#0A0F1A]/92 border-b border-[#22C55E]/12 px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-white">{currentTab?.label}</h1>
-            <p className="text-xs text-slate-500 mt-0.5">{currentTab?.subtitle}</p>
+            <p className="text-xs text-slate-300 mt-0.5">{currentTab?.subtitle}</p>
           </div>
           <div className="flex items-center gap-3">
             {/* Export buttons */}
@@ -1005,6 +2025,300 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   </div>
                 </div>
               </motion.div>
+            )}
+
+            {/* ═══════════ TAB 6: SYSTEM MAP ═══════════ */}
+            {activeTab === 'sitemap' && (
+              <div className="-mx-6 -my-6 flex flex-col">
+
+                {(() => {
+                  const categoryMeta: Record<string, { label: string; dot: string; border: string; bg: string; text: string }> = {
+                    groupRoot:      { label: 'Core',      dot: 'bg-emerald-300', border: 'border-emerald-300/40', bg: 'bg-emerald-950/30', text: 'text-emerald-200' },
+                    groupPublic:    { label: 'Marketing', dot: 'bg-cyan-300',    border: 'border-cyan-300/45',    bg: 'bg-cyan-950/35',    text: 'text-cyan-200' },
+                    groupWorkspace: { label: 'Workspace', dot: 'bg-blue-300',    border: 'border-blue-300/45',    bg: 'bg-blue-950/35',    text: 'text-blue-200' },
+                    groupStudent:   { label: 'Student',   dot: 'bg-lime-300',    border: 'border-lime-300/45',    bg: 'bg-lime-950/30',    text: 'text-lime-200' },
+                    groupLecturer:  { label: 'Lecturer',  dot: 'bg-violet-300',  border: 'border-violet-300/45',  bg: 'bg-violet-950/30',  text: 'text-violet-200' },
+                    groupAdmin:     { label: 'Admin',     dot: 'bg-orange-300',  border: 'border-orange-300/45',  bg: 'bg-orange-950/30',  text: 'text-orange-200' },
+                    groupSection:   { label: 'Section',   dot: 'bg-slate-300',   border: 'border-slate-300/35',   bg: 'bg-slate-900/35',   text: 'text-slate-200' },
+                  };
+
+                  const getNodeCardStyle = (card: { anchorX: number; anchorY: number }, width: number, height: number, sideOffset: number) => {
+                    const projectedX = card.anchorX + sideOffset;
+                    const projectedY = card.anchorY - height / 2;
+                    const minX = 10;
+                    const minY = 10;
+                    const maxX = Math.max(minX, (systemMapContainerRef.current?.clientWidth ?? 0) - width - 10);
+                    const maxY = Math.max(minY, (systemMapContainerRef.current?.clientHeight ?? 0) - height - 10);
+                    return {
+                      left: Math.min(maxX, Math.max(minX, projectedX)),
+                      top: Math.min(maxY, Math.max(minY, projectedY)),
+                    };
+                  };
+
+                  const quickMeta = systemMapQuickNav ? (categoryMeta[systemMapQuickNav.category] ?? categoryMeta.groupSection) : null;
+                  const hoverMeta = systemMapHoverCard ? (categoryMeta[systemMapHoverCard.category] ?? categoryMeta.groupSection) : null;
+
+                  const describeNode = (label: string, category: string) => {
+                    const clean = label.toLowerCase();
+                    if (clean.includes('pricing')) return 'Pricing plans and package comparison.';
+                    if (clean.includes('login')) return 'User sign-in entry to workspaces.';
+                    if (clean.includes('project')) return 'Project planning, tracking, and delivery area.';
+                    if (clean.includes('member')) return 'Team members and collaboration management.';
+                    if (clean.includes('setting')) return 'Workspace configuration and preferences.';
+                    if (clean.includes('audit')) return 'Admin logs for system actions and changes.';
+                    if (clean.includes('analytics')) return 'Metrics and insight dashboards.';
+                    if (category === 'groupPublic') return 'Marketing and public-facing navigation.';
+                    if (category === 'groupStudent') return 'Student workspace feature area.';
+                    if (category === 'groupLecturer') return 'Lecturer workspace feature area.';
+                    if (category === 'groupAdmin') return 'Administrative control and operations.';
+                    return 'Part of the product navigation structure.';
+                  };
+
+                  return (
+                    <>
+                      <div className="px-6 py-2.5 border-b border-white/[0.04] bg-[#0A111D]">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-slate-500 mr-1">Legend:</span>
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-cyan-300/45 bg-cyan-950/40 text-cyan-200">
+                              <span className="w-2 h-2 rounded-full bg-cyan-300" /> Marketing
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-blue-300/45 bg-blue-950/45 text-blue-200">
+                              <span className="w-2 h-2 rounded-full bg-blue-300" /> Workspace
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-lime-300/45 bg-lime-900/35 text-lime-200">
+                              <span className="w-2 h-2 rounded-full bg-lime-300" /> Student
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-violet-300/45 bg-violet-950/35 text-violet-200">
+                              <span className="w-2 h-2 rounded-full bg-violet-300" /> Lecturer
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-orange-300/45 bg-orange-950/35 text-orange-200">
+                              <span className="w-2 h-2 rounded-full bg-orange-300" /> Admin
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 rounded-xl border border-white/[0.08] bg-[#0B1321]/92 backdrop-blur-md p-1 shadow-xl shadow-black/40">
+                            <button
+                              onClick={() => setIsWideSystemMap(v => !v)}
+                              className="w-8 h-8 rounded-lg border border-slate-700/50 bg-[#0F1A2A] text-slate-400 hover:text-[#22C55E] hover:border-[#22C55E]/40 hover:bg-[#162032] transition-all flex items-center justify-center"
+                              title={isWideSystemMap ? 'Switch to top-down (TD)' : 'Switch to left-right (LR)'}
+                            >
+                              {isWideSystemMap ? <ArrowLeftRight size={13} /> : <ArrowUpDown size={13} />}
+                            </button>
+                            <button
+                              onClick={() => setSystemMapRefreshKey(k => k + 1)}
+                              className="w-8 h-8 rounded-lg border border-slate-700/50 bg-[#0F1A2A] text-slate-400 hover:text-[#22C55E] hover:border-[#22C55E]/40 hover:bg-[#162032] transition-all flex items-center justify-center"
+                              title="Re-render diagram"
+                            >
+                              <RefreshCw size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="relative">
+                        {/* ── Map canvas ── */}
+                        <div className="relative min-w-0">
+                          <div
+                            ref={systemMapContainerRef}
+                            className="sitemap-stage relative w-full overflow-hidden bg-[#060C16] touch-none select-none overscroll-contain"
+                            style={{ height: 'calc(100vh - 130px)', overscrollBehavior: 'contain', isolation: 'isolate' }}
+                          >
+                            <div
+                              className="absolute inset-0 z-0 pointer-events-none opacity-[0.10]"
+                              style={{ backgroundImage: 'radial-gradient(circle, #4B5563 1px, transparent 1px)', backgroundSize: '28px 28px' }}
+                            />
+
+                            {isSystemMapLoading && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-20">
+                                <div className="w-10 h-10 rounded-full border-2 border-[#22C55E]/25 border-t-[#22C55E] animate-spin" />
+                                <p className="text-sm text-slate-400 animate-pulse">Building diagram…</p>
+                              </div>
+                            )}
+
+                            {systemMapError && !isSystemMapLoading && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-20">
+                                <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                                  <XCircle size={26} className="text-red-400" />
+                                </div>
+                                <div className="text-center max-w-xs px-4">
+                                  <p className="text-sm font-medium text-red-300 mb-1.5">Failed to render diagram</p>
+                                  <p className="text-xs text-slate-500 leading-relaxed">{systemMapError}</p>
+                                </div>
+                                <button
+                                  onClick={() => setSystemMapRefreshKey(k => k + 1)}
+                                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#162032] border border-[#22C55E]/25 text-[#22C55E] text-xs font-semibold hover:bg-[#1E2D45] transition-colors"
+                                >
+                                  <RefreshCw size={13} /> Try again
+                                </button>
+                              </div>
+                            )}
+
+                            {!isSystemMapLoading && !systemMapError && systemMapSvg && (
+                              <div
+                                ref={systemMapViewportRef}
+                                style={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  left: 0,
+                                  zIndex: 10,
+                                  pointerEvents: 'auto',
+                                  width: mapSvgSize.w,
+                                  height: mapSvgSize.h,
+                                  transform: 'translate(0px, 0px) scale(1)',
+                                  transformOrigin: '0 0',
+                                }}
+                                dangerouslySetInnerHTML={{ __html: systemMapSvg }}
+                              />
+                            )}
+
+                            {!isSystemMapLoading && !systemMapError && !systemMapSvg && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 z-10">
+                                <div className="w-16 h-16 rounded-2xl bg-[#22C55E]/08 border border-[#22C55E]/20 flex items-center justify-center">
+                                  <ListChecks size={28} className="text-[#22C55E]/60" />
+                                </div>
+                                <div className="text-center max-w-xs px-4">
+                                  <p className="text-sm font-semibold text-slate-300 mb-1.5">System Map chưa tải</p>
+                                  <p className="text-xs text-slate-500 leading-relaxed">Nhấn nút làm mới ở góc phải để vẽ sơ đồ hệ thống.</p>
+                                </div>
+                                <button
+                                  onClick={() => setSystemMapRefreshKey(k => k + 1)}
+                                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#162032] border border-[#22C55E]/25 text-[#22C55E] text-xs font-semibold hover:bg-[#1E2D45] transition-colors"
+                                >
+                                  <RefreshCw size={13} /> Tải sơ đồ
+                                </button>
+                              </div>
+                            )}
+
+                            {systemMapHoverCard && hoverMeta && !systemMapQuickNav && (
+                              <div
+                                data-map-hover-card="true"
+                                className="absolute z-30 w-64 rounded-xl border border-white/[0.08] bg-[#0B1321]/96 p-3 shadow-2xl shadow-black/40 pointer-events-none"
+                                style={getNodeCardStyle(systemMapHoverCard, 256, 132, 18)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-medium ${hoverMeta.border} ${hoverMeta.bg} ${hoverMeta.text}`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full ${hoverMeta.dot}`} />
+                                    {hoverMeta.label}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-sm font-semibold text-white leading-tight">{systemMapHoverCard.label}</p>
+                                <p className="mt-1 text-[11px] leading-5 text-slate-400">
+                                  {describeNode(systemMapHoverCard.label, systemMapHoverCard.category)}
+                                </p>
+                                <p className="mt-2 break-all font-mono text-[10px] text-slate-500">
+                                  {systemMapHoverCard.route ?? 'No direct route'}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <AnimatePresence>
+                          {systemMapQuickNav && quickMeta && (
+                            <motion.div
+                              className="pointer-events-none absolute inset-y-0 right-0 z-40 flex items-stretch justify-end p-3 sm:p-4"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.18, ease: 'easeOut' }}
+                            >
+                              <motion.aside
+                                data-map-quick-nav="true"
+                                onClick={(event) => event.stopPropagation()}
+                                className="pointer-events-auto h-full w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#09111D]/96 shadow-2xl shadow-black/50 backdrop-blur-xl"
+                                initial={{ x: 32, opacity: 0.72, scale: 0.985 }}
+                                animate={{ x: 0, opacity: 1, scale: 1 }}
+                                exit={{ x: 20, opacity: 0, scale: 0.99 }}
+                                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                              >
+                                <div className="flex h-full flex-col">
+                                  <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] px-5 py-4">
+                                    <div>
+                                      <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-medium ${quickMeta.border} ${quickMeta.bg} ${quickMeta.text}`}>
+                                        <span className={`h-1.5 w-1.5 rounded-full ${quickMeta.dot}`} />
+                                        {quickMeta.label}
+                                      </span>
+                                      <p className="mt-3 text-base font-semibold text-white leading-tight">{systemMapQuickNav.label}</p>
+                                    </div>
+                                    <button
+                                      onClick={() => setSystemMapQuickNav(null)}
+                                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition-colors hover:border-white/25 hover:text-white"
+                                      title="Close details"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+
+                                  <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+                                    <section>
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Overview</p>
+                                      <p className="mt-2 text-sm leading-6 text-slate-300">
+                                        {describeNode(systemMapQuickNav.label, systemMapQuickNav.category)}
+                                      </p>
+                                    </section>
+
+                                    <section className="grid grid-cols-2 gap-3 text-sm">
+                                      <div className="rounded-xl border border-white/[0.06] bg-[#0D1727] p-3">
+                                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Category</p>
+                                        <p className="mt-2 font-medium text-slate-100">{quickMeta.label}</p>
+                                      </div>
+                                      <div className="rounded-xl border border-white/[0.06] bg-[#0D1727] p-3">
+                                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Children</p>
+                                        <p className="mt-2 font-medium text-slate-100">{systemMapQuickNav.childCount}</p>
+                                      </div>
+                                    </section>
+
+                                    <section>
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Path</p>
+                                      <div className="mt-2 rounded-xl border border-white/[0.06] bg-[#0D1727] px-3 py-3">
+                                        <p className="break-all font-mono text-xs leading-5 text-slate-200">
+                                          {systemMapQuickNav.route ?? 'No direct route for this node.'}
+                                        </p>
+                                      </div>
+                                    </section>
+                                  </div>
+
+                                  <div className="border-t border-white/[0.06] px-5 py-4">
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => setSystemMapQuickNav(null)}
+                                        className="flex-1 h-10 rounded-lg border border-white/10 text-sm font-semibold text-slate-400 transition-colors hover:border-white/25 hover:text-white"
+                                      >
+                                        Close
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const route = systemMapQuickNav.route;
+                                          setSystemMapQuickNav(null);
+                                          openSystemMapRoute(route);
+                                        }}
+                                        disabled={!systemMapQuickNav.route}
+                                        className="flex-1 h-10 rounded-lg bg-[#22C55E] px-3 text-sm font-bold text-[#052E16] transition-colors hover:bg-[#4ADE80] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                                        title={systemMapQuickNav.route ? `Open ${systemMapQuickNav.route}` : 'No route available'}
+                                      >
+                                        Open
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </motion.aside>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      {/* ── Footer status bar ── */}
+                      <div className="flex items-center justify-between px-6 py-2 border-t border-white/[0.05] bg-[#0B1321]/80 text-[11px]">
+                        <span className="text-slate-600">
+                          {systemMapVisibleGraph.nodes.length} visible / {systemMapNodeCount} total nodes
+                        </span>
+
+                      </div>
+                    </>
+                  );
+                })()}
+
+              </div>
             )}
 
           </AnimatePresence>

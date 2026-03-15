@@ -5,7 +5,6 @@ import { useLang } from '../../contexts/LanguageContext';
 
 interface HeroProps {
   onStart: () => void;
-  onDemo: () => void;
 }
 
 const quickIcons = [
@@ -16,7 +15,7 @@ const quickIcons = [
   { icon: <Sparkles size={16} />, tooltip: 'AI' },
 ];
 
-export const Hero: React.FC<HeroProps> = ({ onStart, onDemo: _onDemo }) => {
+export const Hero: React.FC<HeroProps> = ({ onStart }) => {
   const [promptValue, setPromptValue] = useState('');
   const { t } = useLang();
 
@@ -91,10 +90,6 @@ export const Hero: React.FC<HeroProps> = ({ onStart, onDemo: _onDemo }) => {
                   rows={3}
                   className="w-full px-6 pt-5 pb-12 bg-transparent text-white placeholder-slate-500 text-base outline-none resize-none"
                 />
-                <div className="absolute bottom-3 left-4 flex items-center gap-1.5 pointer-events-none">
-                  <Sparkles size={12} className="text-[#22C55E]/60" />
-                  <span className="text-xs text-slate-500 font-medium tracking-wide">AI</span>
-                </div>
                 <div className="absolute bottom-3 right-3">
                   <button
                     type="submit"
@@ -153,25 +148,6 @@ export const Hero: React.FC<HeroProps> = ({ onStart, onDemo: _onDemo }) => {
           <span>{t.hero.stats3uni}</span>
         </motion.div>
 
-        {/* Trust signals */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.7, delay: 0.7 }}
-          className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-600 mb-8"
-        >
-          <span>Trusted by students from</span>
-          <span className="text-slate-400 font-semibold tracking-wide">FPT</span>
-          <span className="text-slate-700">•</span>
-          <span className="text-slate-400 font-semibold tracking-wide">RMIT</span>
-          <span className="text-slate-700">•</span>
-          <span className="text-slate-400 font-semibold tracking-wide">NEU</span>
-          <span className="text-slate-700">•</span>
-          <span className="text-slate-400 font-semibold tracking-wide">HCMUS</span>
-          <span className="text-slate-700">•</span>
-          <span className="text-slate-400 font-semibold tracking-wide">UEH</span>
-        </motion.div>
-
         {/* Product mockup preview */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
@@ -215,19 +191,16 @@ export const Hero: React.FC<HeroProps> = ({ onStart, onDemo: _onDemo }) => {
                       <div className="h-2 rounded-full bg-[#162032] flex-1"></div>
                       <div className="text-[10px] text-slate-600 font-mono">{col.count}</div>
                     </div>
-                    {Array(col.count).fill(0).map((_, i) => {
-                      const isHighlight = col.label === 'In Progress' && i === 0;
-                      return (
-                        <div key={i} className={`rounded-lg p-2 space-y-1.5 ${isHighlight ? 'bg-[#0F2A1A] border border-[#22C55E]/40 shadow-[0_0_8px_rgba(34,197,94,0.12)]' : 'bg-[#162032]'}`}>
-                          <div className={`h-1.5 rounded ${isHighlight ? 'bg-[#22C55E]/60' : 'bg-[#1E3A2A]'}`} style={{ width: `${60 + i * 10}%` }}></div>
-                          <div className={`h-1.5 rounded w-3/4 ${isHighlight ? 'bg-[#22C55E]/35' : 'bg-[#1E3A2A]'}`}></div>
-                          <div className="flex items-center justify-between pt-0.5">
-                            <div className={`h-1.5 w-8 rounded ${isHighlight ? 'bg-[#22C55E]/60' : 'bg-[#22C55E]/20'}`}></div>
-                            <div className={`w-4 h-4 rounded-full bg-gradient-to-r ${isHighlight ? 'from-[#22C55E] to-[#EAB308]/80' : 'from-[#22C55E]/40 to-[#EAB308]/40'}`}></div>
-                          </div>
+                    {Array(col.count).fill(0).map((_, i) => (
+                      <div key={i} className="bg-[#162032] rounded-lg p-2 space-y-1.5">
+                        <div className="h-1.5 rounded bg-[#1E3A2A]" style={{ width: `${60 + i * 10}%` }}></div>
+                        <div className="h-1.5 rounded bg-[#1E3A2A] w-3/4"></div>
+                        <div className="flex items-center justify-between pt-0.5">
+                          <div className="h-1.5 w-8 rounded bg-[#22C55E]/20"></div>
+                          <div className="w-4 h-4 rounded-full bg-gradient-to-r from-[#22C55E]/40 to-[#EAB308]/40"></div>
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
