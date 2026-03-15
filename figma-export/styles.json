@@ -1,0 +1,16 @@
+{
+  "colors": {
+    "primary": "#7C3AED",
+    "primaryHover": "#6D28D9",
+    "primaryGradient": "linear-gradient(90deg, #7C3AED 0%, #2563EB 100%)",
+    "accent": "#F472B6",
+    "textDark": "#0F172A",
+    "darkBg": "#0B1220",
+    "neutralLight": "#FFFFFF",
+    "neutralLight2": "#F8FAFC"
+  },
+  "fonts": {
+    "fontSans": "\"Inter\", ui-sans-serif, system-ui, sans-serif",
+    "fontDisplay": "\"Poppins\", \"Inter\", ui-sans-serif, system-ui, sans-serif"
+  }
+}

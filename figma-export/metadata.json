@@ -1,0 +1,10 @@
+{
+  "package": "project-planning-tool",
+  "generatedAt": "2026-02-21T00:00:00Z",
+  "stylesFile": "styles.json",
+  "assets": [
+    { "name": "app-logo", "path": "assets/app-logo.svg", "notes": "Header logo (vector)" },
+    { "name": "spinner", "path": "assets/spinner.svg", "notes": "Loading spinner (vector)" }
+  ],
+  "notes": "Colors and fonts extracted from src/index.css; some icons are imported from lucide-react — consider replacing with raw SVGs if you need editable vectors in Figma. Avatars use external URLs; download them if needed."
+}

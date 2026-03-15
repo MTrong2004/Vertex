@@ -1,0 +1,108 @@
+[
+  {
+    "id": "p1",
+    "name": "Poster Project",
+    "description": "Thiết kế poster cho sự kiện Tech Day 2026",
+    "deadline": "2026-03-01",
+    "progress": 65,
+    "tasks": [
+      {
+        "id": "t1",
+        "title": "Phác thảo ý tưởng",
+        "status": "done",
+        "priority": "high",
+        "startDate": "2026-02-20",
+        "endDate": "2026-02-21"
+      },
+      {
+        "id": "t2",
+        "title": "Chọn màu sắc chủ đạo",
+        "status": "done",
+        "priority": "medium",
+        "startDate": "2026-02-21",
+        "endDate": "2026-02-22"
+      },
+      {
+        "id": "t3",
+        "title": "Thiết kế layout chính",
+        "status": "in-progress",
+        "priority": "high",
+        "startDate": "2026-02-23",
+        "endDate": "2026-02-25"
+      },
+      {
+        "id": "t4",
+        "title": "Review nội dung text",
+        "status": "todo",
+        "priority": "low",
+        "startDate": "2026-02-26",
+        "endDate": "2026-02-27"
+      },
+      {
+        "id": "t5",
+        "title": "Xuất file in ấn",
+        "status": "todo",
+        "priority": "medium",
+        "startDate": "2026-02-28",
+        "endDate": "2026-03-01"
+      }
+    ]
+  },
+  {
+    "id": "p2",
+    "name": "Short Animation",
+    "description": "Video hoạt hình ngắn 30s giới thiệu CLB",
+    "deadline": "2026-03-15",
+    "progress": 30,
+    "tasks": [
+      {
+        "id": "t6",
+        "title": "Viết kịch bản",
+        "status": "done",
+        "priority": "high",
+        "startDate": "2026-02-20",
+        "endDate": "2026-02-22"
+      },
+      {
+        "id": "t7",
+        "title": "Vẽ Storyboard",
+        "status": "in-progress",
+        "priority": "high",
+        "startDate": "2026-02-23",
+        "endDate": "2026-02-26"
+      },
+      {
+        "id": "t8",
+        "title": "Thiết kế nhân vật",
+        "status": "in-progress",
+        "priority": "medium",
+        "startDate": "2026-02-25",
+        "endDate": "2026-03-01"
+      },
+      {
+        "id": "t9",
+        "title": "Thu âm voice-over",
+        "status": "todo",
+        "priority": "low",
+        "startDate": "2026-03-02",
+        "endDate": "2026-03-03"
+      },
+      {
+        "id": "t10",
+        "title": "Dựng phim & Hiệu ứng",
+        "status": "todo",
+        "priority": "high",
+        "startDate": "2026-03-04",
+        "endDate": "2026-03-10"
+      },
+      {
+        "id": "t11",
+        "title": "Chỉnh sửa âm thanh",
+        "status": "todo",
+        "priority": "medium",
+        "startDate": "2026-03-11",
+        "endDate": "2026-03-12"
+      }
+    ]
+  }
+]
