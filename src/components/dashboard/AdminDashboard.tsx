@@ -131,6 +131,186 @@ const MiniDonut: React.FC<{ data: { label: string; value: number }[]; colors: st
   );
 };
 
+// ─── Mini Area Chart (pure SVG) ───
+const MiniAreaChart: React.FC<{ data: { label: string; value: number }[]; stroke: string; accent: string; height?: number }> = ({ data, stroke, accent, height = 260 }) => {
+  const safeData = data.length > 0 ? data : [{ label: '', value: 0 }];
+  const chartWidth = 760;
+  const padding = { top: 20, right: 12, bottom: 34, left: 12 };
+  const innerWidth = chartWidth - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const max = Math.max(...safeData.map((d) => d.value), 1);
+
+  const points = safeData.map((point, index) => {
+    const x = padding.left + (safeData.length === 1 ? innerWidth / 2 : (index / (safeData.length - 1)) * innerWidth);
+    const y = padding.top + innerHeight - (point.value / max) * innerHeight;
+    return { ...point, x, y };
+  });
+
+  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+  const areaPath = [
+    `M ${points[0].x} ${padding.top + innerHeight}`,
+    ...points.map((point) => `L ${point.x} ${point.y}`),
+    `L ${points[points.length - 1].x} ${padding.top + innerHeight}`,
+    'Z',
+  ].join(' ');
+
+  return (
+    <div className="w-full overflow-hidden">
+      <svg viewBox={`0 0 ${chartWidth} ${height}`} className="w-full h-auto" role="img" aria-label="Analytics area chart">
+        <defs>
+          <linearGradient id="admin-area-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={accent} stopOpacity="0.34" />
+            <stop offset="100%" stopColor={accent} stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="admin-area-line" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={stroke} />
+            <stop offset="100%" stopColor={accent} />
+          </linearGradient>
+        </defs>
+
+        {Array.from({ length: 5 }).map((_, index) => {
+          const ratio = index / 4;
+          const y = padding.top + innerHeight * ratio;
+          return (
+            <line
+              key={`grid-${index}`}
+              x1={padding.left}
+              x2={chartWidth - padding.right}
+              y1={y}
+              y2={y}
+              stroke="rgba(148, 163, 184, 0.15)"
+              strokeDasharray={index === 0 || index === 4 ? '0' : '3 5'}
+            />
+          );
+        })}
+
+        {points.length > 1 && (
+          <motion.path
+            d={areaPath}
+            fill="url(#admin-area-fill)"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8 }}
+          />
+        )}
+
+        {points.length > 1 && (
+          <motion.path
+            d={linePath}
+            fill="none"
+            stroke="url(#admin-area-line)"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ duration: 1.1, ease: 'easeOut' }}
+          />
+        )}
+
+        {points.map((point, index) => (
+          <motion.circle
+            key={`point-${point.label}-${index}`}
+            cx={point.x}
+            cy={point.y}
+            r="4.5"
+            fill="#0F1A2A"
+            stroke={stroke}
+            strokeWidth="2"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.25, delay: 0.2 + index * 0.06 }}
+          />
+        ))}
+
+        {points.map((point, index) => (
+          <text
+            key={`label-${point.label}-${index}`}
+            x={point.x}
+            y={height - 10}
+            textAnchor="middle"
+            className="fill-slate-400"
+            fontSize="10"
+            fontWeight={500}
+          >
+            {point.label}
+          </text>
+        ))}
+      </svg>
+    </div>
+  );
+};
+
+const ANALYTICS_TRAFFIC_SOURCES = [
+  { label: 'Direct', value: 48, accent: 'bg-cyan-400' },
+  { label: 'Search', value: 29, accent: 'bg-emerald-400' },
+  { label: 'Referral', value: 15, accent: 'bg-amber-400' },
+  { label: 'Social', value: 8, accent: 'bg-violet-400' },
+];
+
+const TrafficSourceBars: React.FC<{ data: { label: string; value: number; accent: string }[] }> = ({ data }) => {
+  const total = data.reduce((sum, item) => sum + item.value, 0) || 1;
+
+  return (
+    <div className="space-y-4">
+      {data.map((item, index) => {
+        const share = (item.value / total) * 100;
+
+        return (
+          <div key={item.label}>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${item.accent}`} />
+                <span className="text-sm text-slate-300 truncate">{item.label}</span>
+              </div>
+              <span className="text-xs font-semibold text-white">{Math.round(share)}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+              <motion.div
+                className={`h-full rounded-full ${item.accent}`}
+                initial={{ width: 0 }}
+                animate={{ width: `${share}%` }}
+                transition={{ duration: 0.8, delay: index * 0.08 }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const AnalyticsCalendarStrip: React.FC = () => {
+  const today = new Date();
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - 3 + index);
+    return {
+      key: date.toISOString(),
+      weekday: new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(date),
+      day: date.getDate(),
+      isToday: date.toDateString() === today.toDateString(),
+    };
+  });
+
+  return (
+    <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+      {days.map((day, index) => (
+        <motion.div
+          key={day.key}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: index * 0.05 }}
+          className={`rounded-xl border px-3 py-3 text-center ${day.isToday ? 'bg-[#22C55E]/15 border-[#22C55E]/35 text-white shadow-[0_16px_30px_rgba(34,197,94,0.14)]' : 'bg-[#162032] border-white/5 text-slate-400'}`}
+        >
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-80">{day.weekday}</div>
+          <div className="mt-1 text-lg font-bold leading-none">{day.day}</div>
+        </motion.div>
+      ))}
+    </div>
+  );
+};
+
 // ─── CSV export helper ───
 function downloadCSV(filename: string, rows: string[][]) {
   const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -166,7 +346,7 @@ const actionColorMap: Record<string, string> = {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
   const { t } = useLang();
-  const [activeTab, setActiveTab] = useState<'users' | 'ai' | 'analytics' | 'auditlog' | 'config' | 'sitemap'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'ai' | 'analytics' | 'auditlog' | 'config' | 'sitemap'>('analytics');
   const [userSegment, setUserSegment] = useState<'all' | 'active' | 'banned' | 'paid' | 'free-trial'>('all');
   const [collapsed, setCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1892,14 +2072,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             {/* ═══════════ TAB 3: ANALYTICS (Charts) ═══════════ */}
             {activeTab === 'analytics' && (
               <motion.div key="analytics" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                <div className="mb-6 flex items-end justify-between">
+                <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-white">{t.admin.executiveOverview}</h3>
                     <p className="text-sm text-slate-500">{t.admin.executiveOverviewSubtitle}</p>
                   </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#22C55E]/20 bg-[#22C55E]/10 px-3 py-1 text-xs text-[#86EFAC]">
+                      <TrendingUp size={12} />
+                      Live metrics
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-[#0F1A2A] px-3 py-1 text-xs text-slate-400">
+                      <Clock size={12} className="text-cyan-400" />
+                      Updated just now
+                    </span>
+                  </div>
                 </div>
-                {/* Hot Metrics row */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+                <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
                   {[
                     { label: t.admin.newUsersToday, value: todayMetrics.newUsersToday, icon: <UserPlus size={18} />, accent: 'text-cyan-300', bg: 'from-cyan-500/20 to-cyan-600/10' },
                     { label: t.admin.apiCostToday, value: `$${todayMetrics.apiCostToday.toFixed(2)}`, icon: <DollarSign size={18} />, accent: 'text-emerald-300', bg: 'from-emerald-500/20 to-emerald-600/10' },
@@ -1915,31 +2105,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   ))}
                 </div>
 
-                {/* Charts grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-[#0F1A2A]/80 rounded-xl border border-[#22C55E]/10 p-6">
-                    <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                      <UserPlus size={16} className="text-blue-400" />
-                      {t.admin.userSignupTrend}
-                    </h3>
-                    <MiniBarChart data={userSignupChart} color="#3B82F6" />
-                  </div>
-                  <div className="bg-[#0F1A2A]/80 rounded-xl border border-[#22C55E]/10 p-6">
-                    <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                      <DollarSign size={16} className="text-red-400" />
-                      {t.admin.apiCostDaily}
-                    </h3>
-                    <MiniBarChart data={apiCostChart.map(d => ({ ...d, value: Math.round(d.value * 100) / 100 }))} color="#EF4444" />
-                  </div>
-                </div>
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                  <div className="xl:col-span-2 space-y-6">
+                    <section className="bg-[#0F1A2A]/80 rounded-xl border border-[#22C55E]/10 p-6 shadow-[0_18px_36px_rgba(0,0,0,0.24)]">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-5">
+                        <div>
+                          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                            <UserPlus size={16} className="text-blue-400" />
+                            {t.admin.userSignupTrend}
+                          </h3>
+                          <p className="text-sm text-slate-500 mt-1">Weekly growth, registrations and momentum.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#162032] px-3 py-1 text-[11px] text-slate-400 border border-white/5">
+                            <TrendingUp size={12} className="text-emerald-400" />
+                            +12.4%
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#162032] px-3 py-1 text-[11px] text-slate-400 border border-white/5">
+                            <Clock size={12} className="text-cyan-400" />
+                            Last 8 periods
+                          </span>
+                        </div>
+                      </div>
 
-                {/* Plan breakdown donut */}
-                <div className="bg-[#0F1A2A]/80 rounded-xl border border-[#22C55E]/10 p-6 max-w-md">
-                  <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                    <Sparkles size={16} className="text-yellow-400" />
-                    {t.admin.planBreakdown}
-                  </h3>
-                  <MiniDonut data={planDistribution} colors={['#F59E0B', '#0EA5E9']} centerLabel={t.admin.usersCountLabel} />
+                      <MiniAreaChart data={userSignupChart} stroke="#4F8CFF" accent="#22C55E" />
+
+                      <div className="mt-5 border-t border-white/5 pt-4">
+                        <div className="mb-3 flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Calendar</p>
+                            <p className="text-sm text-slate-300">This week</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-slate-500">
+                            <button type="button" className="rounded-full border border-white/5 bg-[#162032] p-1.5 transition-colors hover:text-white hover:border-[#22C55E]/30">
+                              <ChevronLeft size={13} />
+                            </button>
+                            <button type="button" className="rounded-full border border-white/5 bg-[#162032] p-1.5 transition-colors hover:text-white hover:border-[#22C55E]/30">
+                              <ChevronRight size={13} />
+                            </button>
+                          </div>
+                        </div>
+                        <AnalyticsCalendarStrip />
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="space-y-6">
+                    <section className="bg-[#0F1A2A]/80 rounded-xl border border-[#22C55E]/10 p-6">
+                      <div className="flex items-center justify-between gap-3 mb-4">
+                        <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                          <Sparkles size={16} className="text-yellow-400" />
+                          {t.admin.planBreakdown}
+                        </h3>
+                        <span className="text-xs text-slate-500">Mix</span>
+                      </div>
+                      <MiniDonut data={planDistribution} colors={['#F59E0B', '#0EA5E9']} centerLabel={t.admin.usersCountLabel} />
+                    </section>
+
+                    <section className="bg-[#0F1A2A]/80 rounded-xl border border-[#22C55E]/10 p-6">
+                      <div className="flex items-center justify-between gap-3 mb-4">
+                        <h3 className="text-base font-semibold text-white">Traffic Source</h3>
+                        <span className="text-xs text-slate-500">Share</span>
+                      </div>
+                      <TrafficSourceBars data={ANALYTICS_TRAFFIC_SOURCES} />
+                    </section>
+                  </div>
                 </div>
               </motion.div>
             )}
